@@ -45,13 +45,13 @@ class Loop:
         self.storage = Storage(config.output_dir)
         self.provider = get_provider(config)
 
-    def run(self, instruction: str, file_path: str | None = None, overwrite: bool = False) -> dict:
+    def run(self, instruction: str, file_path: str | None = None, overwrite: bool = False, task_id: str | None = None) -> dict:
         config = self.config
         config.ensure_dirs()
         if not (instruction and instruction.strip()):
             raise WorkmateError("BAD_INSTRUCTION", "请给一句任务指令，例如：把 sales.xlsx 做成销售周报。")
 
-        task = Task(task_id=uuid4().hex[:12], instruction=instruction, input_file=file_path or "")
+        task = Task(task_id=task_id or uuid4().hex[:12], instruction=instruction, input_file=file_path or "")
         task.status = "running"
         self.storage.save_task(task)
         self.storage.append_log(f"[task {task.task_id}] 开始，指令：{instruction}")

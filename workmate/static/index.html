@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WorkMate · 销售数据周报</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">W</span>
+      <div>
+        <h1>WorkMate</h1>
+        <p>本地 AI 销售数据周报 · 数据不出你的电脑</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel">
+      <h2>生成周报</h2>
+
+      <div class="field">
+        <label for="file-select">选择数据表</label>
+        <select id="file-select" disabled>
+          <option value="">加载文件列表…</option>
+        </select>
+        <p class="hint">或上传一个新文件到 data 目录</p>
+      </div>
+
+      <div class="field">
+        <label for="file-upload">上传 xlsx / csv</label>
+        <input type="file" id="file-upload" accept=".xlsx,.xls,.csv" />
+        <p class="hint" id="upload-msg"></p>
+      </div>
+
+      <div class="field">
+        <label for="instruction">任务指令</label>
+        <textarea id="instruction" rows="2">做成销售周报</textarea>
+      </div>
+
+      <button id="generate" class="primary" disabled>生成周报</button>
+      <p id="task-status" class="status" role="status" aria-live="polite"></p>
+
+      <h3 class="subtitle">历史任务</h3>
+      <ul id="history" class="history"></ul>
+    </section>
+
+    <section class="panel result">
+      <h2>结果</h2>
+      <div id="result" class="result-body">
+        <p class="muted">生成后在这里查看周报、图表，并下载汇总表。</p>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -90,16 +90,24 @@
     └── evidence/                ← AI 自动创建（每阶段证据包）
 ```
 
-## 🛠 当前项目：WorkMate（M1+M2 硬化）
+## 🛠 当前项目：WorkMate（后端 M1+M2 + 本地网页 M3）
 
-本仓库当前正在开发 **WorkMate**——本地 AI 销售数据周报助手（后端 MVP，M1 骨架 + M2 硬化已完成：数字自动核对、内容审核、权限白名单、覆盖确认、日志）。
+本仓库当前正在开发 **WorkMate**——本地 AI 销售数据周报助手（后端 MVP 已完成：数字自动核对、内容审核、权限白名单、覆盖确认、日志；本地网页 UI 已完成）。
 
 ### 启动方法
+
+**方式一：本地网页（推荐）**
 
 ```bash
 python3.12 -m venv .venv            # 首次
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env               # 首次；默认本地 Ollama，开发期可设 WORKMATE_MODEL_PROVIDER=mock
+.venv/bin/python -m workmate serve --port 8000   # 浏览器打开 http://127.0.0.1:8000
+```
+
+**方式二：命令行**
+
+```bash
 .venv/bin/python -m workmate run --instruction "把 data/你的表.xlsx 做成销售周报"
 # 如需覆盖已有成品文件，加 --force（原始数据文件永不覆盖）
 ```

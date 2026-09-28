@@ -21,6 +21,10 @@ def main(argv=None) -> int:
     resume_p = sub.add_parser("resume", help="按任务 ID 查看任务状态/成果")
     resume_p.add_argument("--task-id", required=True)
 
+    serve_p = sub.add_parser("serve", help="启动本地网页界面")
+    serve_p.add_argument("--host", default="127.0.0.1")
+    serve_p.add_argument("--port", type=int, default=8000)
+
     args = parser.parse_args(argv)
     loop = Loop(load_config())
 
@@ -28,6 +32,13 @@ def main(argv=None) -> int:
         if args.cmd == "run":
             result = loop.run(args.instruction, args.file, overwrite=args.force)
             print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.cmd == "serve":
+            import uvicorn
+
+            from .api import create_app
+
+            print(f"WorkMate 已启动：http://{args.host}:{args.port}")
+            uvicorn.run(create_app(), host=args.host, port=args.port, log_level="warning")
         else:
             task = loop.storage.load_task(args.task_id)
             if task is None:
