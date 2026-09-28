@@ -1,6 +1,7 @@
 """FastAPI 应用：把后端引擎暴露为本地 Web API + 静态前端页面。"""
 from __future__ import annotations
 
+import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import inspect
 from .config import Config, load_config
 from .loop import Loop
 from .schemas import WorkmateError
@@ -20,9 +22,18 @@ from .tools import files as file_tools
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
+class InspectRequest(BaseModel):
+    file: str
+
+
 class TaskRequest(BaseModel):
     file: str
     instruction: str
+    field_mapping: dict | None = None
+    amount_mode: str = "A"
+    report_week: str | None = None
+    compare_week: str | None = None
+    complete: dict | None = None
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -39,9 +50,18 @@ def create_app(config: Config | None = None) -> FastAPI:
         status = 404 if exc.code == "NOT_FOUND" else 400
         return JSONResponse(status_code=status, content=exc.to_dict())
 
-    def _run_task(task_id: str, instruction: str, file_path: str) -> None:
+    def _run_task(task_id: str, file_path: str, req: TaskRequest) -> None:
         try:
-            loop.run(instruction, file_path, task_id=task_id)
+            loop.run(
+                req.instruction.strip(),
+                file_path,
+                task_id=task_id,
+                field_mapping=req.field_mapping,
+                amount_mode=req.amount_mode,
+                report_week=req.report_week,
+                compare_week=req.compare_week,
+                complete=req.complete,
+            )
         except WorkmateError:
             pass  # 任务状态已由 loop 持久化为 failed
 
@@ -90,13 +110,18 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise WorkmateError("FILE_EXISTS", "同名文件已存在，请先改名再上传") from exc
         return {"name": name, "size": len(data)}
 
+    @app.post("/api/v1/inspect")
+    def inspect_file(req: InspectRequest):
+        p = _resolve_input(req.file)
+        return inspect.inspect_file(p)
+
     @app.post("/api/v1/tasks")
     def create_task(req: TaskRequest):
         if not (req.instruction and req.instruction.strip()):
             raise WorkmateError("BAD_INSTRUCTION", "请填写任务指令")
         p = _resolve_input(req.file)
         task_id = uuid.uuid4().hex[:12]
-        executor.submit(_run_task, task_id, req.instruction.strip(), str(p))
+        executor.submit(_run_task, task_id, str(p), req)
         return {"task_id": task_id, "status": "running"}
 
     @app.get("/api/v1/tasks")
@@ -116,6 +141,20 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not p.exists():
             raise WorkmateError("NOT_FOUND", "报告不存在")
         return {"report": p.read_text(encoding="utf-8")}
+
+    @app.get("/api/v1/tasks/{task_id}/basis")
+    def get_basis(task_id: str):
+        p = config.output_dir / task_id / "analysis_basis.json"
+        if not p.exists():
+            raise WorkmateError("NOT_FOUND", "依据文件不存在")
+        return json.loads(p.read_text(encoding="utf-8"))
+
+    @app.get("/api/v1/tasks/{task_id}/facts")
+    def get_facts(task_id: str):
+        t = loop.storage.load_task(task_id)
+        if t is None or not t.result:
+            raise WorkmateError("NOT_FOUND", "任务不存在或未完成")
+        return {"facts": t.result.get("facts", []), "change_facts": t.result.get("change_facts", [])}
 
     @app.get("/api/v1/tasks/{task_id}/files/{name:path}")
     def get_file(task_id: str, name: str):

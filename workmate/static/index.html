@@ -16,44 +16,49 @@
       </div>
     </div>
   </header>
-
   <p id="model-notice" class="model-notice" hidden>当前为演示模式：周报总结是占位内容，未调用真实模型。</p>
 
   <main class="layout">
     <section class="panel">
-      <h2>生成周报</h2>
+      <ol class="steps">
+        <li class="step" data-step="1">1 选表</li>
+        <li class="step" data-step="2">2 检查与口径</li>
+        <li class="step" data-step="3" id="step-week">3 选周</li>
+        <li class="step" data-step="4">4 结果</li>
+      </ol>
 
-      <div class="field">
-        <label for="file-select">选择数据表</label>
-        <select id="file-select" disabled>
-          <option value="">加载文件列表…</option>
-        </select>
-        <p class="hint">或上传一个新文件到 data 目录</p>
+      <div id="step-1" class="step-body">
+        <div class="field">
+          <label for="file-select">选择数据表</label>
+          <select id="file-select"><option value="">加载中…</option></select>
+        </div>
+        <div class="field">
+          <label for="file-upload">或上传 xlsx / csv</label>
+          <input type="file" id="file-upload" accept=".xlsx,.csv" />
+          <p class="hint" id="upload-msg"></p>
+        </div>
+        <button id="btn-inspect" class="primary" disabled>下一步：检查数据</button>
       </div>
 
-      <div class="field">
-        <label for="file-upload">上传 xlsx / csv</label>
-        <input type="file" id="file-upload" accept=".xlsx,.csv" />
-        <p class="hint" id="upload-msg"></p>
+      <div id="step-2" class="step-body" hidden>
+        <div id="inspect-result"></div>
+        <button id="btn-week" class="primary">下一步：选周</button>
       </div>
 
-      <div class="field">
-        <label for="instruction">任务指令</label>
-        <textarea id="instruction" rows="2">做成销售周报</textarea>
+      <div id="step-3" class="step-body" hidden>
+        <div id="week-result"></div>
+        <button id="btn-generate" class="primary">生成周报</button>
       </div>
 
-      <button id="generate" class="primary" disabled>生成周报</button>
-      <p id="task-status" class="status" role="status" aria-live="polite"></p>
-
-      <h3 class="subtitle">历史任务</h3>
-      <ul id="history" class="history"></ul>
+      <div id="step-4" class="step-body" hidden>
+        <p id="task-status" class="status" role="status" aria-live="polite"></p>
+        <button id="btn-restart" class="secondary">重新生成</button>
+      </div>
     </section>
 
     <section class="panel result">
       <h2>结果</h2>
-      <div id="result" class="result-body">
-        <p class="muted">生成后在这里查看周报、图表，并下载汇总表。</p>
-      </div>
+      <div id="result"><p class="muted">生成后在这里查看周报、图表与依据。</p></div>
     </section>
   </main>
 

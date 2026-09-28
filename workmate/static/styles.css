@@ -134,3 +134,24 @@ button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .layout { grid-template-columns: 1fr; }
   .model-notice { margin: 16px 24px 0; }
 }
+
+.steps { display: flex; gap: 6px; list-style: none; margin: 0 0 16px; padding: 0; flex-wrap: wrap; }
+.step { padding: 4px 10px; border-radius: 20px; background: var(--color-bg); border: 1px solid var(--color-border); font-size: 12px; color: var(--color-muted); }
+.step.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+
+.step-body .field { margin-bottom: 12px; }
+.mapping { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mapping .field { margin-bottom: 8px; }
+.quality { font-size: 13px; margin: 4px 0; }
+.radio, .check { display: block; margin: 6px 0; font-size: 14px; }
+.warn { color: var(--color-danger); font-size: 13px; }
+.ok { color: var(--color-success); font-size: 13px; }
+
+button.secondary { width: 100%; margin-top: 8px; padding: 9px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
+
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.fact { border: 1px solid var(--color-border); border-radius: 10px; padding: 10px; background: var(--color-surface); }
+.fact b { display: block; font-size: 13px; margin-bottom: 4px; }
+.fact-val { display: block; font-size: 18px; font-weight: 700; }
+.fact-src { display: block; font-size: 11px; color: var(--color-muted); margin-top: 4px; }
+.changes { border-left: 3px solid var(--color-primary); padding-left: 10px; margin-bottom: 12px; font-size: 13px; }

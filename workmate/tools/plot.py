@@ -17,8 +17,12 @@ def plot_trend(df: pd.DataFrame, date_col, sales_col, out_path: Path) -> None:
     d = pd.to_datetime(df[date_col], errors="coerce")
     mask = d.notna()
     s = df.loc[mask].assign(_d=d[mask].dt.date).groupby("_d")[sales_col].sum().sort_index()
+    plot_trend_series(s, out_path)
+
+
+def plot_trend_series(daily, out_path: Path) -> None:
     plt.figure(figsize=(8, 4))
-    plt.plot(s.index.astype(str), s.values, marker="o")
+    plt.plot(daily.index.astype(str), daily.values, marker="o")
     plt.title("销售趋势")
     plt.xlabel("日期")
     plt.ylabel("销售额")

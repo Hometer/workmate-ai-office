@@ -1,9 +1,10 @@
-"""compute_metrics：本地确定性计算（pandas），不让模型心算，从根上避免数字幻觉。"""
+"""compute_metrics：本地确定性计算（A/B 金额口径 + 自然周）。"""
 from __future__ import annotations
 
 import pandas as pd
 
 from ..schemas import WorkmateError
+from .. import amounts, weeks
 
 # 列名别名（常见中文/英文字段），大小写不敏感
 COLUMN_ALIASES = {
@@ -18,11 +19,9 @@ COLUMN_ALIASES = {
 def _find_column(df: pd.DataFrame, names: list[str]):
     columns = list(df.columns)
     lowers = [str(c).strip().lower() for c in columns]
-    # 精确匹配优先
     for c, low in zip(columns, lowers):
         if low in [n.lower() for n in names]:
             return c
-    # 再尝试"包含"
     for c, low in zip(columns, lowers):
         for n in names:
             if n.lower() in low and low:
@@ -31,7 +30,6 @@ def _find_column(df: pd.DataFrame, names: list[str]):
 
 
 def infer_columns(df: pd.DataFrame) -> dict:
-    """自动识别业务列，返回 {sales, date, product, channel, order} 映射。"""
     mapping = {}
     for key, names in COLUMN_ALIASES.items():
         col = _find_column(df, names)
@@ -44,23 +42,6 @@ def infer_columns(df: pd.DataFrame) -> dict:
             f"无法识别'销售额'列。当前表列名：{cols}。请把销售额列改名为：销售额/金额/sales/amount，再重试。",
         )
     return mapping
-
-
-def _mom_growth(df: pd.DataFrame, date_col, sales_col) -> float | None:
-    """环比增长率 = (本周 − 上周) ÷ 上周；不足两周返回 None。"""
-    try:
-        d = pd.to_datetime(df[date_col], errors="coerce")
-        w = d.dt.to_period("W")
-        mask = d.notna() & df[sales_col].notna()
-        weekly = df.loc[mask].assign(_w=w[mask]).groupby("_w")[sales_col].sum().sort_index()
-        if len(weekly) < 2:
-            return None
-        last, prev = float(weekly.iloc[-1]), float(weekly.iloc[-2])
-        if prev == 0:
-            return None
-        return (last - prev) / prev
-    except Exception:  # noqa: BLE001
-        return None
 
 
 def _to_numeric_sales(df: pd.DataFrame, sales_col) -> pd.Series:
@@ -81,38 +62,71 @@ def _to_numeric_sales(df: pd.DataFrame, sales_col) -> pd.Series:
     return numeric
 
 
-def compute_all(df: pd.DataFrame, mapping: dict) -> dict:
+def _mom_from_series(dates: pd.Series, amounts: pd.Series) -> float | None:
+    """按自然周（周一）聚合，环比 = (本周 − 上周) ÷ 上周。"""
+    weekly: dict = {}
+    for d, a in zip(dates.tolist(), amounts.tolist()):
+        if pd.isna(d) or pd.isna(a):
+            continue
+        ts = pd.Timestamp(d)
+        key = weeks.monday_of(ts.date())
+        weekly[key] = weekly.get(key, 0.0) + float(a)
+    if len(weekly) < 2:
+        return None
+    keys = sorted(weekly)
+    last, prev = weekly[keys[-1]], weekly[keys[-2]]
+    if prev == 0:
+        return None
+    return (last - prev) / prev
+
+
+def compute_all(df: pd.DataFrame, mapping: dict, amount_mode: str = "A", report_week_monday=None) -> dict:
     sales_col = mapping["sales"]
     df = df.copy()
-    df[sales_col] = _to_numeric_sales(df, sales_col)
 
-    total_sales = float(df[sales_col].sum())
+    # 报告周过滤（自然周）
+    if report_week_monday and mapping.get("date"):
+        df = weeks.filter_to_week(df, mapping["date"], report_week_monday)
+
+    numeric = _to_numeric_sales(df, sales_col)
+    df[sales_col] = numeric
+
+    total_sales, amount_warnings = amounts.total_by_mode(df, mapping, amount_mode, numeric)
 
     line_count = int(len(df))
-    order_col = mapping.get("order")
+
     order_count = None
+    order_col = mapping.get("order")
     if order_col:
-        order_ids = df[order_col].astype("string").str.strip()
-        if order_ids.notna().all() and order_ids.ne("").all():
-            order_count = int(order_ids.nunique())
+        ids = amounts.order_ids(df, order_col)
+        if amounts.order_complete(ids):
+            order_count = int(ids.nunique())
 
     avg_order_value = (total_sales / order_count) if order_count else None
 
-    mom_growth = _mom_growth(df, mapping.get("date"), sales_col) if mapping.get("date") else None
+    # 环比
+    mom_growth = None
+    if mapping.get("date"):
+        if amount_mode == "A":
+            d = pd.to_datetime(df[mapping["date"]], errors="coerce")
+            mom_growth = _mom_from_series(d, df[sales_col])
+        else:
+            ol = amounts.order_level(df, mapping, numeric)
+            if "_date" in ol.columns and not ol["_multi_date"].any():
+                d = pd.to_datetime(ol["_date"], errors="coerce")
+                mom_growth = _mom_from_series(d, ol["_amt"])
 
-    top5 = []
+    # Top5 商品（仅 A 模式可可靠分摊）
+    top5: list[dict] = []
+    product_ranking_available = True
     product_col = mapping.get("product")
-    if product_col:
+    if product_col and amount_mode == "A":
         g = df.groupby(product_col)[sales_col].sum().nlargest(5)
         top5 = [{"name": str(k), "sales": float(v)} for k, v in g.items()]
+    elif product_col and amount_mode == "B":
+        product_ranking_available = False
 
-    channel_share = []
-    channel_col = mapping.get("channel")
-    if channel_col:
-        g = df.groupby(channel_col)[sales_col].sum()
-        total = float(g.sum())
-        if total:
-            channel_share = [{"name": str(k), "share": float(v) / total} for k, v in g.items()]
+    channel_share, channel_share_available = amounts.channel_share_by_mode(df, mapping, amount_mode, numeric, total_sales)
 
     return {
         "total_sales": total_sales,
@@ -122,4 +136,9 @@ def compute_all(df: pd.DataFrame, mapping: dict) -> dict:
         "mom_growth": mom_growth,
         "top5": top5,
         "channel_share": channel_share,
+        "amount_mode": amount_mode,
+        "report_week": str(report_week_monday) if report_week_monday else None,
+        "warnings": amount_warnings,
+        "product_ranking_available": product_ranking_available,
+        "channel_share_available": channel_share_available,
     }

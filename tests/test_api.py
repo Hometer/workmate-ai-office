@@ -124,3 +124,37 @@ def test_index_page_served(tmp_path):
     r = c.get("/")
     assert r.status_code == 200
     assert "WorkMate" in r.text
+
+
+def test_inspect_endpoint(tmp_path, sample_df):
+    c, cfg = _client(tmp_path)
+    sample_df.to_excel(cfg.data_dir / "sales.xlsx", index=False)
+    r = c.post("/api/v1/inspect", json={"file": "sales.xlsx"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["mapping"]["sales"] == "销售额"
+    assert data["summary"]["rows"] == 6
+    assert "金额口径未确认" in data["blockers"]
+
+
+def test_task_amount_mode_b(tmp_path):
+    import pandas as pd
+
+    c, cfg = _client(tmp_path)
+    df = pd.DataFrame({"订单号": ["A", "A", "B"], "销售额": [100, 100, 50]})
+    df.to_excel(cfg.data_dir / "s.xlsx", index=False)
+    r = c.post("/api/v1/tasks", json={"file": "s.xlsx", "instruction": "做周报", "amount_mode": "B"})
+    task_id = r.json()["task_id"]
+    status = None
+    for _ in range(100):
+        status = c.get(f"/api/v1/tasks/{task_id}").json()["status"]
+        if status in ("done", "failed"):
+            break
+        time.sleep(0.05)
+    assert status == "done"
+    facts = c.get(f"/api/v1/tasks/{task_id}/facts").json()["facts"]
+    total = next(f["value"] for f in facts if f["id"] == "total_sales")
+    assert total == 150
+    basis = c.get(f"/api/v1/tasks/{task_id}/basis").json()
+    assert basis["amount_mode"] == "B"
+    assert basis["source_fingerprint"]
