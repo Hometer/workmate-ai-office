@@ -15,8 +15,11 @@ def _fmt(v: Any) -> str:
 def render_report(metrics: dict, summary: str) -> str:
     lines = ["# 销售数据周报", "", "## 本周核心结论", "", summary, "", "## 关键数字", ""]
     lines.append(f"- 总销售额：{_fmt(metrics.get('total_sales'))}")
-    lines.append(f"- 订单量：{_fmt(metrics.get('order_count'))}")
-    lines.append(f"- 客单价：{_fmt(metrics.get('avg_order_value'))}")
+    lines.append(f"- 明细行数：{_fmt(metrics.get('line_count'))}")
+    order_count = metrics.get("order_count")
+    lines.append(f"- 订单量（订单号去重）：{_fmt(order_count) if order_count is not None else '待确认（无完整订单号）'}")
+    avg_order_value = metrics.get("avg_order_value")
+    lines.append(f"- 客单价：{_fmt(avg_order_value) if avg_order_value is not None else '待确认（订单量未知）'}")
     mom = metrics.get("mom_growth")
     if mom is None:
         lines.append("- 环比增长率：本表无此数据")
@@ -45,9 +48,11 @@ def render_report(metrics: dict, summary: str) -> str:
 
 def conservative_summary(metrics: dict) -> str:
     """保守模板：审核/模型失败时的确定性降级总结（不编造，只复述数字）。"""
-    parts = [f"本周总销售额 {_fmt(metrics.get('total_sales'))}", f"订单量 {_fmt(metrics.get('order_count'))}"]
+    parts = [f"本周总销售额 {_fmt(metrics.get('total_sales'))}", f"明细行数 {_fmt(metrics.get('line_count'))}"]
+    order_count = metrics.get("order_count")
+    parts.append(f"订单量 {order_count}" if order_count is not None else "订单量 待确认（无完整订单号）")
     avg = metrics.get("avg_order_value")
-    parts.append(f"客单价 {_fmt(avg)}" if avg is not None else "客单价 本表无此数据")
+    parts.append(f"客单价 {_fmt(avg)}" if avg is not None else "客单价 待确认（订单量未知）")
     mom = metrics.get("mom_growth")
     parts.append(f"环比增长率 {mom * 100:.2f}%" if mom is not None else "环比增长率 本表无此数据")
     top5 = metrics.get("top5") or []

@@ -16,9 +16,19 @@ let pollTimer = null;
 init();
 
 async function init() {
-  await Promise.all([loadFiles(), loadHistory()]);
+  await Promise.all([loadFiles(), loadHistory(), loadMode()]);
   const fromUrl = new URLSearchParams(location.search).get("task");
   if (fromUrl) await loadTask(fromUrl);
+}
+
+async function loadMode() {
+  try {
+    const { model_provider } = await apiGet("/api/v1/health");
+    $("#model-notice").hidden = model_provider !== "mock";
+  } catch (e) {
+    $("#model-notice").hidden = false;
+    $("#model-notice").textContent = "模型状态暂时无法确认，请刷新页面重试。";
+  }
 }
 
 async function loadFiles() {
@@ -144,7 +154,7 @@ async function renderTask(t) {
   if (t.status === "failed") {
     taskStatus.className = "status failed";
     taskStatus.textContent = "任务失败";
-    resultEl.innerHTML = `<p class="muted">任务失败：${escapeHtml(JSON.stringify(t.result || {}))}</p>`;
+    resultEl.innerHTML = `<p class="muted">${escapeHtml(t.error?.message || "任务失败，请重试")}</p>`;
     return;
   }
   taskStatus.className = "status success";

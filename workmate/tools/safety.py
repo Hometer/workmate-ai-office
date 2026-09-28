@@ -12,7 +12,7 @@ _NUM_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
 
 def _known_numbers(metrics: dict) -> list[float]:
     known: list[float] = []
-    for key in ["total_sales", "order_count", "avg_order_value"]:
+    for key in ["total_sales", "line_count", "order_count", "avg_order_value"]:
         v = metrics.get(key)
         if v is not None:
             known.append(float(v))

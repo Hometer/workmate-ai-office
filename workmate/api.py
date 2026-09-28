@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from pathlib import Path
 
+import pandas as pd
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -54,7 +56,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/api/v1/health")
     def health():
-        return {"status": "ok"}
+        return {"status": "ok", "model_provider": config.model_provider}
 
     @app.get("/api/v1/data-files")
     def data_files():
@@ -68,10 +70,23 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise WorkmateError("BAD_FILE", "文件名不能为空")
         if Path(name).suffix.lower() not in file_tools.ALLOWED_EXT:
             raise WorkmateError("UNSUPPORTED_FILE", "仅支持 xlsx/csv")
-        data = await file.read()
+        data = await file.read(file_tools.MAX_FILE_MB * 1024 * 1024 + 1)
         if len(data) > file_tools.MAX_FILE_MB * 1024 * 1024:
             raise WorkmateError("FILE_TOO_LARGE", f"文件超过 {file_tools.MAX_FILE_MB}MB 上限")
-        (config.data_dir / name).write_bytes(data)
+        try:
+            if Path(name).suffix.lower() == ".csv":
+                if b"\x00" in data:
+                    raise ValueError("binary CSV")
+                pd.read_csv(BytesIO(data), nrows=1)
+            else:
+                pd.read_excel(BytesIO(data), nrows=1)
+        except Exception as exc:
+            raise WorkmateError("FILE_PARSE_FAILED", "文件内容不是可读取的表格") from exc
+        try:
+            with (config.data_dir / name).open("xb") as destination:
+                destination.write(data)
+        except FileExistsError as exc:
+            raise WorkmateError("FILE_EXISTS", "同名文件已存在，请先改名再上传") from exc
         return {"name": name, "size": len(data)}
 
     @app.post("/api/v1/tasks")
@@ -101,7 +116,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise WorkmateError("NOT_FOUND", "报告不存在")
         return {"report": p.read_text(encoding="utf-8")}
 
-    @app.get("/api/v1/tasks/{task_id}/files/{name}")
+    @app.get("/api/v1/tasks/{task_id}/files/{name:path}")
     def get_file(task_id: str, name: str):
         base = (config.output_dir / task_id).resolve()
         target = (base / name).resolve()

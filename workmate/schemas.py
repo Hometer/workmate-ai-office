@@ -28,6 +28,7 @@ class Task(BaseModel):
     updated_at: str = Field(default_factory=now_iso)
     steps: list[StepRecord] = Field(default_factory=list)
     result: Optional[dict[str, Any]] = None
+    error: Optional[dict[str, str]] = None
 
 
 class WorkmateError(Exception):

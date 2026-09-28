@@ -34,7 +34,7 @@ def verify_metrics(df: pd.DataFrame, mapping: dict, metrics: dict) -> list[dict]
     """重新读源数据→独立重算→逐项比对，返回不一致清单（空 = 通过）。"""
     recomputed = compute.compute_all(df, mapping)
     issues: list[dict] = []
-    for key in ["total_sales", "order_count", "avg_order_value", "mom_growth"]:
+    for key in ["total_sales", "line_count", "order_count", "avg_order_value", "mom_growth"]:
         if not _close(metrics.get(key), recomputed.get(key)):
             issues.append({"metric": key, "expected": recomputed.get(key), "got": metrics.get(key)})
     if not _list_close(metrics.get("top5") or [], recomputed.get("top5") or []):

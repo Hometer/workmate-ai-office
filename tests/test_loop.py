@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pandas as pd
+
 from workmate.config import Config
 from workmate.loop import Loop
 
@@ -32,7 +34,11 @@ def test_end_to_end(tmp_path, sample_df):
     content = report.read_text(encoding="utf-8")
     assert "销售数据周报" in content
     assert "总销售额：920.00" in content
+    assert "明细行数：6" in content
+    assert "订单量（订单号去重）：6" in content
     assert (out_dir / "data_summary.xlsx").exists()
+    summary = pd.read_excel(out_dir / "data_summary.xlsx", sheet_name="关键指标")
+    assert summary.loc[summary["指标"] == "明细行数", "数值"].iloc[0] == 6
     charts = list((out_dir / "charts").glob("*.png"))
     assert len(charts) == 3
 
@@ -59,3 +65,22 @@ def test_error_returns_structured(tmp_path):
     except Exception as e:  # noqa: BLE001
         d = e.to_dict()
         assert "error" in d and "code" in d["error"] and "message" in d["error"]
+    saved = loop.storage.list_tasks()[0]
+    assert saved.status == "failed"
+    assert saved.error == d["error"]
+
+
+def test_unexpected_failure_is_persisted_without_input_in_log(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    loop = Loop(cfg)
+    monkeypatch.setattr(loop, "_execute", lambda *_: 1 / 0)
+    instruction = "私人指令内容"
+    try:
+        loop.run(instruction)
+        assert False
+    except Exception as e:  # noqa: BLE001
+        assert e.to_dict()["error"]["code"] == "INTERNAL_ERROR"
+    saved = loop.storage.list_tasks()[0]
+    assert saved.status == "failed"
+    assert saved.error["code"] == "INTERNAL_ERROR"
+    assert instruction not in loop.storage.app_log_path.read_text(encoding="utf-8")

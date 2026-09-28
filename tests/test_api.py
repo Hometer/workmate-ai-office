@@ -22,7 +22,7 @@ def _client(tmp_path):
 
 def test_health(tmp_path):
     c, _ = _client(tmp_path)
-    assert c.get("/api/v1/health").json() == {"status": "ok"}
+    assert c.get("/api/v1/health").json() == {"status": "ok", "model_provider": "mock"}
 
 
 def test_upload_and_list_files(tmp_path):
@@ -39,6 +39,24 @@ def test_upload_rejects_bad_ext(tmp_path):
     r = c.post("/api/v1/upload", files={"file": ("x.txt", b"hi", "text/plain")})
     assert r.status_code == 400
     assert r.json()["error"]["code"] == "UNSUPPORTED_FILE"
+
+
+def test_upload_rejects_invalid_workbook(tmp_path):
+    c, _ = _client(tmp_path)
+    r = c.post("/api/v1/upload", files={"file": ("fake.xlsx", b"not an Excel workbook")})
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "FILE_PARSE_FAILED"
+
+
+def test_upload_does_not_overwrite_existing_data(tmp_path):
+    c, cfg = _client(tmp_path)
+    original = "销售额\n1\n".encode()
+    existing = cfg.data_dir / "sales.csv"
+    existing.write_bytes(original)
+    r = c.post("/api/v1/upload", files={"file": ("sales.csv", "销售额\n2\n".encode())})
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "FILE_EXISTS"
+    assert existing.read_bytes() == original
 
 
 def test_create_task_and_poll(tmp_path, sample_df):
@@ -60,6 +78,9 @@ def test_create_task_and_poll(tmp_path, sample_df):
     report = c.get(f"/api/v1/tasks/{task_id}/report").json()["report"]
     assert "销售数据周报" in report
     assert c.get(f"/api/v1/tasks/{task_id}/files/data_summary.xlsx").status_code == 200
+    chart = c.get(f"/api/v1/tasks/{task_id}/files/charts%2Ftrend.png")
+    assert chart.status_code == 200
+    assert chart.headers["content-type"] == "image/png"
 
 
 def test_create_task_missing_file(tmp_path):
@@ -69,11 +90,33 @@ def test_create_task_missing_file(tmp_path):
     assert r.json()["error"]["code"] == "FILE_NOT_FOUND"
 
 
+def test_failed_task_exposes_structured_reason(tmp_path):
+    c, cfg = _client(tmp_path)
+    (cfg.data_dir / "bad.csv").write_text("其他列\n1\n", encoding="utf-8")
+    created = c.post("/api/v1/tasks", json={"file": "bad.csv", "instruction": "做成周报"}).json()
+    for _ in range(100):
+        task = c.get(f"/api/v1/tasks/{created['task_id']}").json()
+        if task["status"] == "failed":
+            break
+        time.sleep(0.05)
+    assert task["status"] == "failed"
+    assert task["error"]["code"] == "COLUMN_UNKNOWN"
+    assert task["error"]["message"]
+
+
 def test_get_file_not_found(tmp_path):
     c, _ = _client(tmp_path)
     r = c.get("/api/v1/tasks/abc/files/nonexistent.png")
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "NOT_FOUND"
+
+
+def test_chart_route_rejects_path_traversal(tmp_path):
+    c, cfg = _client(tmp_path)
+    (cfg.output_dir / "secret.txt").write_text("private", encoding="utf-8")
+    r = c.get("/api/v1/tasks/abc/files/..%2Fsecret.txt")
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "FORBIDDEN"
 
 
 def test_index_page_served(tmp_path):

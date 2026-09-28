@@ -19,6 +19,7 @@ SUMMARY_SYSTEM = """你是 WorkMate 数据周报助手，职责是：根据给�
 2. 先结论后数据，短、有结论，不要空话套话。
 3. 数字保持原样，不要四舍五入到失真，也不要给约数。
 4. 禁止自造百分比、趋势或同比/环比等表里没有的数据。
+5. 明细行数不是订单量；没有完整订单号时，订单量和客单价写“待确认”。
 正例：本周总销售额 20,615.49 元，环比 -77.75%，Top5 商品为蓝牙耳机等，建议关注直播渠道。
 反例（禁止）：总销售额大约两万元；同比上涨 30%。
 输出：纯文本正文，不含任何标题。"""
@@ -27,8 +28,9 @@ SUMMARY_SYSTEM = """你是 WorkMate 数据周报助手，职责是：根据给�
 def _metrics_text(metrics: dict) -> str:
     parts = [
         f"总销售额：{metrics['total_sales']:,.2f}",
-        f"订单量：{metrics['order_count']}",
-        f"客单价：{metrics['avg_order_value']:,.2f}" if metrics["avg_order_value"] is not None else "客单价：本表无此数据",
+        f"明细行数：{metrics['line_count']}",
+        f"订单量：{metrics['order_count']}" if metrics["order_count"] is not None else "订单量：待确认（无完整订单号）",
+        f"客单价：{metrics['avg_order_value']:,.2f}" if metrics["avg_order_value"] is not None else "客单价：待确认（订单量未知）",
     ]
     mom = metrics.get("mom_growth")
     parts.append(f"环比增长率：{mom * 100:.2f}%" if mom is not None else "环比增长率：本表无此数据")
@@ -54,7 +56,7 @@ class Loop:
         task = Task(task_id=task_id or uuid4().hex[:12], instruction=instruction, input_file=file_path or "")
         task.status = "running"
         self.storage.save_task(task)
-        self.storage.append_log(f"[task {task.task_id}] 开始，指令：{instruction}")
+        self.storage.append_log(f"[task {task.task_id}] 开始")
         t0 = time.time()
 
         try:
@@ -70,10 +72,19 @@ class Loop:
             return result
         except WorkmateError as e:
             task.status = "failed"
+            task.error = e.to_dict()["error"]
             task.updated_at = now_iso()
             self.storage.save_task(task)
             self.storage.append_log(f"[task {task.task_id}] 失败：{e.code}")
             raise
+        except Exception as e:
+            error = WorkmateError("INTERNAL_ERROR", "任务执行失败，请检查输入后重试")
+            task.status = "failed"
+            task.error = error.to_dict()["error"]
+            task.updated_at = now_iso()
+            self.storage.save_task(task)
+            self.storage.append_log(f"[task {task.task_id}] 失败：{error.code}")
+            raise error from e
 
     def _execute(self, task: Task, file_path: str | None, overwrite: bool) -> dict:
         config = self.config
@@ -155,7 +166,7 @@ class Loop:
             if check["pass"]:
                 return text, None
             if attempt < 2:
-                self.storage.append_log(f"[task] 总结审核未通过，重试 {attempt + 1}/3：{'；'.join(check['reasons'])}")
+                self.storage.append_log(f"[task] 总结审核未通过，重试 {attempt + 1}/3")
                 continue
             return self._fallback_summary(metrics, "内容审核未通过：" + "；".join(check["reasons"]))
         return self._fallback_summary(metrics, "总结生成未达要求")

@@ -70,8 +70,13 @@ def compute_all(df: pd.DataFrame, mapping: dict) -> dict:
 
     total_sales = float(df[sales_col].sum())
 
+    line_count = int(len(df))
     order_col = mapping.get("order")
-    order_count = int(df[order_col].nunique()) if order_col else int(len(df))
+    order_count = None
+    if order_col:
+        order_ids = df[order_col].astype("string").str.strip()
+        if order_ids.notna().all() and order_ids.ne("").all():
+            order_count = int(order_ids.nunique())
 
     avg_order_value = (total_sales / order_count) if order_count else None
 
@@ -93,6 +98,7 @@ def compute_all(df: pd.DataFrame, mapping: dict) -> dict:
 
     return {
         "total_sales": total_sales,
+        "line_count": line_count,
         "order_count": order_count,
         "avg_order_value": avg_order_value,
         "mom_growth": mom_growth,

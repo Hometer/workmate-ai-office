@@ -70,8 +70,9 @@ def write_metrics_xlsx(metrics: dict, target: Path, output_dir: Path) -> None:
     ensure_within_output_dir(target, output_dir)
     key_rows = [
         {"指标": "总销售额", "数值": metrics.get("total_sales")},
-        {"指标": "订单量", "数值": metrics.get("order_count")},
-        {"指标": "客单价", "数值": metrics.get("avg_order_value")},
+        {"指标": "明细行数", "数值": metrics.get("line_count")},
+        {"指标": "订单量（订单号去重）", "数值": metrics.get("order_count") if metrics.get("order_count") is not None else "待确认"},
+        {"指标": "客单价", "数值": metrics.get("avg_order_value") if metrics.get("avg_order_value") is not None else "待确认"},
         {"指标": "环比增长率", "数值": metrics.get("mom_growth")},
     ]
     top5_df = pd.DataFrame(metrics.get("top5") or [])
