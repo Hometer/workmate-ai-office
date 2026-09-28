@@ -16,6 +16,7 @@ def main(argv=None) -> int:
     run_p = sub.add_parser("run", help="跑一次周报任务")
     run_p.add_argument("--file", help="xlsx/csv 路径（可选，缺省搜 data 目录）")
     run_p.add_argument("--instruction", required=True, help="任务指令，如：把 sales.xlsx 做成销售周报")
+    run_p.add_argument("--force", action="store_true", help="允许覆盖已有成品文件（原始数据文件永不覆盖）")
 
     resume_p = sub.add_parser("resume", help="按任务 ID 查看任务状态/成果")
     resume_p.add_argument("--task-id", required=True)
@@ -25,7 +26,7 @@ def main(argv=None) -> int:
 
     try:
         if args.cmd == "run":
-            result = loop.run(args.instruction, args.file)
+            result = loop.run(args.instruction, args.file, overwrite=args.force)
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             task = loop.storage.load_task(args.task_id)

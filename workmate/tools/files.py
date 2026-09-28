@@ -54,11 +54,13 @@ def describe_schema(df: pd.DataFrame) -> dict:
     }
 
 
-def write_file(target: Path, content: str, output_dir: Path, input_file: Path | None = None) -> None:
-    """写文本文件到成品目录；红线：不写目录外、不覆盖原始数据文件。"""
+def write_file(target: Path, content: str, output_dir: Path, input_file: Path | None = None, overwrite: bool = False) -> None:
+    """写文本文件到成品目录；红线：不写目录外、不覆盖原始数据文件、命中已有文件需确认。"""
     ensure_within_output_dir(target, output_dir)
     if input_file is not None and Path(target).resolve() == Path(input_file).resolve():
         raise WorkmateError("WRITE_FORBIDDEN", "原始数据文件只读，禁止覆盖。")
+    if Path(target).exists() and not overwrite:
+        raise WorkmateError("FILE_EXISTS", f"目标已存在：{Path(target).name}。如需覆盖请加 --force。")
     Path(target).parent.mkdir(parents=True, exist_ok=True)
     Path(target).write_text(content, encoding="utf-8")
 

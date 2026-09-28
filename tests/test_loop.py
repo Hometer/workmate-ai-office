@@ -39,8 +39,15 @@ def test_end_to_end(tmp_path, sample_df):
     # 原始文件未被改动
     assert xlsx.read_bytes() == before
 
-    # 任务状态已持久化
-    assert loop.storage.load_task(result["task_id"]) is not None
+    # 任务状态已持久化，且包含 M2 钩子步骤
+    saved = loop.storage.load_task(result["task_id"])
+    assert saved is not None
+    step_names = [s.name for s in saved.steps]
+    assert "verify_metrics" in step_names
+    assert "safety_check" in step_names
+
+    # 人读日志已生成
+    assert loop.storage.app_log_path.exists()
 
 
 def test_error_returns_structured(tmp_path):

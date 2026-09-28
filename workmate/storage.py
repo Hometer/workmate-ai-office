@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .schemas import Task
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -20,6 +20,7 @@ class Storage:
         self.state_dir = Path(output_dir) / ".workmate"
         self.tasks_path = self.state_dir / "tasks.json"
         self.trace_path = self.state_dir / "trace.jsonl"
+        self.app_log_path = self.state_dir / "app.log"
         self.state_dir.mkdir(parents=True, exist_ok=True)
 
     def save_task(self, task: Task) -> None:
@@ -35,6 +36,13 @@ class Storage:
         event = {"schema_version": SCHEMA_VERSION, **event}
         with open(self.trace_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+    def append_log(self, msg: str) -> None:
+        """人读日志：只记文件名/行数/耗时/状态，不记单元格值与个人信息。"""
+        from .schemas import now_iso
+
+        with open(self.app_log_path, "a", encoding="utf-8") as f:
+            f.write(f"{now_iso()} {msg}\n")
 
     def _load_tasks(self) -> dict:
         if self.tasks_path.exists():

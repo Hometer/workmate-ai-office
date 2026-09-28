@@ -6,8 +6,10 @@ PLAN_STEPS = [
     "read_file",
     "infer_columns",
     "compute_metrics",
+    "verify_metrics",
     "plot_chart",
     "write_summary",
+    "safety_check",
     "write_files",
 ]
 

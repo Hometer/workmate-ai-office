@@ -90,9 +90,9 @@
     └── evidence/                ← AI 自动创建（每阶段证据包）
 ```
 
-## 🛠 当前项目：WorkMate（M1 骨架）
+## 🛠 当前项目：WorkMate（M1+M2 硬化）
 
-本仓库当前正在开发 **WorkMate**——本地 AI 销售数据周报助手（后端 MVP 第 1 子阶段，M1 骨架已可用）。
+本仓库当前正在开发 **WorkMate**——本地 AI 销售数据周报助手（后端 MVP，M1 骨架 + M2 硬化已完成：数字自动核对、内容审核、权限白名单、覆盖确认、日志）。
 
 ### 启动方法
 
@@ -101,16 +101,18 @@ python3.12 -m venv .venv            # 首次
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env               # 首次；默认本地 Ollama，开发期可设 WORKMATE_MODEL_PROVIDER=mock
 .venv/bin/python -m workmate run --instruction "把 data/你的表.xlsx 做成销售周报"
+# 如需覆盖已有成品文件，加 --force（原始数据文件永不覆盖）
 ```
 
 > 写总结默认用本地 Ollama（免费、数据不出本机）。没装 Ollama 时，把 `.env` 里 `WORKMATE_MODEL_PROVIDER` 改成 `mock` 可先跑通。
 
 ### 验证方法
 
-1. 把你的销售表（xlsx/csv，需含“销售额”列）放进 `data/`。
-2. 跑上面的 `run` 命令。
+1. 把你的销售表（xlsx/csv，需含“销售额”列）放进 `data/`（目录外的文件会被拒绝）。
+2. 跑上面的 `run` 命令（程序会自动核对数字，不一致会报错拒绝交付）。
 3. 打开 `outputs/<任务id>/`：查看 `report.md`、`charts/` 三张图、`data_summary.xlsx`。
 4. 抽查总销售额等 2–3 个数字与原始表一致，确认原始表未被改动。
+5. 日志在 `outputs/.workmate/app.log`（只记耗时/状态，不记你的数据明细）。
 
 ### 测试
 
