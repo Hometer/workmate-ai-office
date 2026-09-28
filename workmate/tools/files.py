@@ -8,7 +8,7 @@ import pandas as pd
 from ..schemas import WorkmateError
 
 MAX_FILE_MB = 20
-ALLOWED_EXT = {".xlsx", ".xls", ".csv"}
+ALLOWED_EXT = {".xlsx", ".csv"}
 
 
 def ensure_within_output_dir(target: Path, output_dir: Path) -> None:

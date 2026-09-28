@@ -24,3 +24,14 @@ def test_trace_appends(tmp_path):
     lines = s.trace_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 2
     assert "schema_version" in lines[0]
+
+
+def test_recover_interrupted(tmp_path):
+    s = Storage(tmp_path)
+    s.save_task(Task(task_id="r1", status="running", instruction="x"))
+    s.save_task(Task(task_id="d1", status="done", instruction="y"))
+    assert s.recover_interrupted() == 1
+    r1 = s.load_task("r1")
+    assert r1.status == "failed"
+    assert r1.error["code"] == "INTERRUPTED"
+    assert s.load_task("d1").status == "done"

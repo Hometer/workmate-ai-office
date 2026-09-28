@@ -59,3 +59,17 @@ def test_order_count_is_unknown_without_complete_ids(order_ids):
     assert "明细行数：3" in report
     assert "订单量（订单号去重）：待确认" in report
     assert "客单价：待确认" in report
+
+
+def test_bad_sales_value_raises():
+    df = pd.DataFrame({"销售额": [100, "abc", 200]})
+    with pytest.raises(WorkmateError) as ei:
+        compute.compute_all(df, {"sales": "销售额"})
+    assert ei.value.code == "BAD_SALES_VALUE"
+
+
+def test_empty_sales_cells_ok():
+    df = pd.DataFrame({"销售额": [100, None, 200]})
+    m = compute.compute_all(df, {"sales": "销售额"})
+    assert m["total_sales"] == 300.0
+    assert m["line_count"] == 3

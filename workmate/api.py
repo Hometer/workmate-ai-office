@@ -29,6 +29,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     config = config or load_config()
     config.ensure_dirs()
     loop = Loop(config)
+    loop.storage.recover_interrupted()
     executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="workmate")
 
     app = FastAPI(title="WorkMate", docs_url="/api/docs", openapi_url="/api/openapi.json")

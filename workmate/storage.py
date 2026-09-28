@@ -42,6 +42,26 @@ class Storage:
         tasks.sort(key=lambda t: t.created_at, reverse=True)
         return tasks
 
+    def recover_interrupted(self) -> int:
+        """把 stale 的 running 任务标记为"已中断，可重新生成"，返回恢复数量。"""
+        from .schemas import StepRecord, now_iso
+
+        with self._lock:
+            data = self._load_tasks()
+            changed = 0
+            for tid, raw in data.items():
+                if raw.get("status") == "running":
+                    t = Task.model_validate(raw)
+                    t.status = "failed"
+                    t.error = {"code": "INTERRUPTED", "message": "服务中断，任务未完成，可重新生成。"}
+                    t.steps.append(StepRecord(name="recover", status="failed", detail="服务中断", finished_at=now_iso()))
+                    t.updated_at = now_iso()
+                    data[tid] = t.model_dump()
+                    changed += 1
+            if changed:
+                _atomic_write(self.tasks_path, json.dumps(data, ensure_ascii=False, indent=2))
+            return changed
+
     def append_trace(self, event: dict) -> None:
         event = {"schema_version": SCHEMA_VERSION, **event}
         with self._lock:

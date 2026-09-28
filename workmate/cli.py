@@ -27,6 +27,7 @@ def main(argv=None) -> int:
 
     args = parser.parse_args(argv)
     loop = Loop(load_config())
+    loop.storage.recover_interrupted()
 
     try:
         if args.cmd == "run":

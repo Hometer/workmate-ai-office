@@ -29,6 +29,16 @@ def test_read_table_rejects_unsupported(tmp_path):
         assert e.code == "UNSUPPORTED_FILE"
 
 
+def test_read_table_rejects_xls(tmp_path):
+    p = tmp_path / "old.xls"
+    p.write_bytes(b"fake")
+    try:
+        files.read_table(p)
+        assert False
+    except WorkmateError as e:
+        assert e.code == "UNSUPPORTED_FILE"
+
+
 def test_read_table_rejects_missing(tmp_path):
     try:
         files.read_table(tmp_path / "nope.xlsx")

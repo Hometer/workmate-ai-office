@@ -135,6 +135,7 @@ async function loadTask(taskId) {
   currentTaskId = taskId;
   try {
     const t = await apiGet(`/api/v1/tasks/${taskId}`);
+    syncInputs(t);
     if (t.status === "running" || t.status === "created") {
       setRunning(true);
       taskStatus.className = "status running";
@@ -172,7 +173,7 @@ async function renderTask(t) {
   if (charts.length) {
     html += '<div class="chart-grid">';
     for (const c of charts) {
-      html += `<img src="/api/v1/tasks/${t.task_id}/files/${encodeURIComponent(c)}" alt="图表" />`;
+      html += `<div class="chart-item"><img src="/api/v1/tasks/${t.task_id}/files/${encodeURIComponent(c)}" alt="图表 ${c}" data-name="${c}" /></div>`;
     }
     html += "</div>";
   }
@@ -182,6 +183,14 @@ async function renderTask(t) {
     html += `<a class="download" href="/api/v1/tasks/${t.task_id}/files/data_summary.xlsx" download>下载汇总表 data_summary.xlsx</a>`;
   }
   resultEl.innerHTML = html || '<p class="muted">暂无结果</p>';
+
+  // 图片加载失败时给明确提示，不显示破图占位
+  resultEl.querySelectorAll("img").forEach((img) => {
+    img.addEventListener("error", () => {
+      const holder = img.closest(".chart-item");
+      if (holder) holder.innerHTML = `<p class="muted">图片加载失败：${escapeHtml(img.dataset.name || "")}</p>`;
+    });
+  });
 }
 
 function setRunning(running) {
@@ -192,6 +201,16 @@ function setRunning(running) {
 
 function refreshGenerate() {
   generateBtn.disabled = !fileSelect.value;
+}
+
+function syncInputs(t) {
+  // 点历史任务时，同步左侧文件下拉与指令框为该任务当时的输入
+  const name = (t.input_file || "").split("/").pop();
+  if (name && [...fileSelect.options].some((o) => o.value === name)) {
+    fileSelect.value = name;
+  }
+  if (t.instruction) instruction.value = t.instruction;
+  refreshGenerate();
 }
 
 function statusText(s) {
