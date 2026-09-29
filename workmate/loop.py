@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from uuid import uuid4
@@ -115,6 +116,9 @@ class Loop:
         if currency_distinct > 1:
             raise WorkmateError("MULTI_CURRENCY", f"币种列（{currency_col}）有 {currency_distinct} 种币种，不能混算。")
 
+        # P0-1 全表销售额检查（报告/对比周之外的坏值也要阻断）
+        compute._to_numeric_sales(full_df, mapping["sales"])
+
         report_monday = weeks.parse_monday(report_week)
 
         # G8 对比周由后端推导并校验相邻
@@ -145,10 +149,10 @@ class Loop:
             compare_df = weeks.filter_to_week(full_df, mapping["date"], compare_monday)
             compare_metrics = compute.compute_all(compare_df, mapping, amount_mode)
 
-        # G8 B 模式跨周订单：归属不明确不出环比
+        # G8 B 模式跨任意自然周订单：归属不明确不出环比
         cross_week = False
-        if amount_mode == "B" and compare_monday and mapping.get("date"):
-            cross_week = self._b_cross_week(full_df, mapping, report_monday, compare_monday)
+        if amount_mode == "B" and mapping.get("date"):
+            cross_week = self._b_multi_week(full_df, mapping)
 
         if report_metrics["mom_growth"] is None and compare_metrics is not None and (complete or {}).get("report") and (complete or {}).get("compare") and not cross_week:
             prev = compare_metrics["total_sales"]
@@ -170,6 +174,13 @@ class Loop:
                 raise WorkmateError("VERIFY_FAILED", "对比周数字核对不一致：" + json.dumps(c_issues, ensure_ascii=False))
         self._step(task, "verify_metrics", "done", "数字核对一致（报告周+对比周）")
 
+        # P0-8 有日期但未选报告周 → 汇总模式（无环比）
+        has_date = bool(mapping.get("date"))
+        is_summary_mode = (not has_date) or (has_date and report_monday is None)
+        unit = inspect.currency_display_unit(full_df)
+        if is_summary_mode:
+            report_metrics["mom_growth"] = None
+
         task_out = config.output_dir / task.task_id
         charts_dir = task_out / "charts"
         charts_dir.mkdir(parents=True, exist_ok=True)
@@ -177,15 +188,17 @@ class Loop:
         self._step(task, "plot_chart", "done", f"{len(chart_files)} 张图")
 
         fingerprint = inspect.file_fingerprint(input_path)
-        facts = facts_mod.build_facts(report_metrics, mapping, str(report_monday) if report_monday else None, True)
-        change_facts = facts_mod.build_change_facts(report_metrics, compare_metrics or {}, mapping) if compare_metrics else []
+        facts = facts_mod.build_facts(report_metrics, mapping, str(report_monday) if report_monday else None, True, unit=unit)
+        # P0-2 仅当两周都确认完整才输出变化事实
+        change_facts = []
+        if compare_metrics and (complete or {}).get("report") and (complete or {}).get("compare"):
+            change_facts = facts_mod.build_change_facts(report_metrics, compare_metrics, mapping)
         self._step(task, "facts", "done", f"{len(facts)} 张事实卡")
 
         summary, warning = self._summarize(report_metrics, facts)
         self._step(task, "write_summary", "done" if not warning else "done_with_warning", warning)
         self._step(task, "safety_check", "done" if not warning else "done_with_warning", warning or "通过")
 
-        is_summary_mode = not mapping.get("date")
         title = "销售数据汇总" if is_summary_mode else "销售数据周报"
         report_md = report_templates.render_report(
             report_metrics,
@@ -196,6 +209,8 @@ class Loop:
             warnings=report_metrics.get("warnings") or [],
             product_ranking_available=report_metrics.get("product_ranking_available", True),
             channel_share_available=report_metrics.get("channel_share_available", True),
+            unit=unit,
+            summary_mode=is_summary_mode,
         )
         files.write_file(task_out / "report.md", report_md, config.output_dir, input_file=input_path, overwrite=overwrite)
         files.write_metrics_xlsx(report_metrics, task_out / "data_summary.xlsx", config.output_dir)
@@ -230,17 +245,22 @@ class Loop:
             "title": title,
         }
 
-    def _b_cross_week(self, full_df, mapping, report_monday, compare_monday) -> bool:
+    def _b_multi_week(self, full_df, mapping) -> bool:
+        """B 模式：任一订单出现在多个自然周即归属不清（不限于报告/对比周）。"""
         order_col = mapping.get("order")
-        if not order_col:
+        if not order_col or not mapping.get("date"):
             return False
         d = pd.to_datetime(full_df[mapping["date"]], errors="coerce")
-        r_start, r_end = pd.Timestamp(report_monday), pd.Timestamp(report_monday) + pd.Timedelta(days=7)
-        c_start, c_end = pd.Timestamp(compare_monday), pd.Timestamp(compare_monday) + pd.Timedelta(days=7)
         ids = full_df[order_col].astype("string").str.strip()
-        r_ids = set(ids[(d >= r_start) & (d < r_end)].dropna())
-        c_ids = set(ids[(d >= c_start) & (d < c_end)].dropna())
-        return bool(r_ids & c_ids)
+        weeks_of: dict[str, set] = {}
+        for oid, dv in zip(ids, d):
+            if pd.isna(oid) or pd.isna(dv):
+                continue
+            s = str(oid).strip()
+            if s == "":
+                continue
+            weeks_of.setdefault(s, set()).add(weeks.monday_of(pd.Timestamp(dv).date()))
+        return any(len(s) > 1 for s in weeks_of.values())
 
     def _plot(self, report_df, mapping, metrics, charts_dir, amount_mode):
         from .tools.compute import _to_numeric_sales
@@ -288,6 +308,13 @@ class Loop:
                 continue
             check = safety.safety_check(text, metrics)
             if check["pass"]:
+                has_digit = re.search(r"\d", text) is not None
+                has_cite = re.search(r"\[[a-z_]+\]", text) is not None
+                if has_digit and not has_cite:
+                    if attempt < 2:
+                        self.storage.append_log(f"[task] 总结含数字但未标注事实卡引用，重试 {attempt + 1}/3")
+                        continue
+                    return self._fallback_summary(metrics, "总结含数字但未标注事实卡引用")
                 return text, None
             if attempt < 2:
                 self.storage.append_log(f"[task] 总结审核未通过，重试 {attempt + 1}/3")

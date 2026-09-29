@@ -35,6 +35,20 @@ def detect_currency(df: pd.DataFrame) -> tuple[str | None, int]:
     return None, 0
 
 
+def currency_display_unit(df: pd.DataFrame) -> str:
+    """返回金额显示单位：单一 CNY/人民币→元；单一其它币种→该币种（如 USD）；无币种列→元。"""
+    col, distinct = detect_currency(df)
+    if col is None or distinct == 0:
+        return "元"
+    vals = df[col].astype(str).str.strip().unique().tolist()
+    if len(vals) == 1:
+        low = vals[0].lower()
+        if low in ("cny", "rmb", "人民币", "¥", "元"):
+            return "元"
+        return vals[0]
+    return "元"  # 混合由 MULTI_CURRENCY 阻断，这里不会到达
+
+
 def _clean_val(v):
     try:
         if v is None or pd.isna(v):

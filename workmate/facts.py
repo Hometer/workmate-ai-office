@@ -20,15 +20,15 @@ def _card(fid, label, value, unit, source_col, formula, rng, excluded, verified)
     }
 
 
-def build_facts(report_metrics: dict, mapping: dict, report_week: str | None, verify_ok: bool, excluded: int = 0) -> list[dict]:
+def build_facts(report_metrics: dict, mapping: dict, report_week: str | None, verify_ok: bool, excluded: int = 0, unit: str = "元") -> list[dict]:
     facts: list[dict] = []
     rng = report_week or "全表"
-    facts.append(_card("total_sales", "报告周总销售额", _num(report_metrics["total_sales"]), "元", mapping.get("sales"), f"sum(销售额) · 口径{report_metrics.get('amount_mode')}", rng, excluded, verify_ok))
+    facts.append(_card("total_sales", "报告周总销售额", _num(report_metrics["total_sales"]), unit, mapping.get("sales"), f"sum(销售额) · 口径{report_metrics.get('amount_mode')}", rng, excluded, verify_ok))
     facts.append(_card("line_count", "明细行数", report_metrics["line_count"], "行", None, "count(明细行)", rng, 0, verify_ok))
     if report_metrics["order_count"] is not None:
         facts.append(_card("order_count", "订单量", report_metrics["order_count"], "单", mapping.get("order"), "count(distinct 订单号)", rng, 0, verify_ok))
     if report_metrics["avg_order_value"] is not None:
-        facts.append(_card("avg_order_value", "客单价", _num(report_metrics["avg_order_value"]), "元", None, "总销售额 ÷ 订单量", rng, 0, verify_ok))
+        facts.append(_card("avg_order_value", "客单价", _num(report_metrics["avg_order_value"]), unit, None, "总销售额 ÷ 订单量", rng, 0, verify_ok))
     if report_metrics["mom_growth"] is not None:
         facts.append(_card("mom_growth", "环比增长率", round(report_metrics["mom_growth"] * 100, 2), "%", mapping.get("date"), "(报告周 − 对比周) ÷ 对比周", f"{report_week} vs 上一周", 0, verify_ok))
     if report_metrics.get("product_ranking_available") and report_metrics.get("top5"):

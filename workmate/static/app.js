@@ -209,6 +209,7 @@ function remainingBlockers() {
   if (!state.mapping.sales) b.push("缺少销售额列");
   if (!state.amountMode) b.push("金额口径未确认");
   const q = state.inspect.quality;
+  if (q.sales && q.sales.empty > 0) b.push(`销售额列有 ${q.sales.empty} 个空值`);
   if (q.sales && q.sales.unparseable > 0) b.push(`销售额列有 ${q.sales.unparseable} 个无法解析的值`);
   return b;
 }
@@ -326,6 +327,7 @@ function pollTask(taskId) {
       if (t.status === "done" || t.status === "failed") {
         clearInterval(state.pollTimer);
         await renderResult(t);
+        loadHistory();
       } else {
         taskStatus.textContent = "正在生成…";
       }

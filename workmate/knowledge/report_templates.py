@@ -22,6 +22,8 @@ def render_report(
     warnings: list[str] | None = None,
     product_ranking_available: bool = True,
     channel_share_available: bool = True,
+    unit: str = "元",
+    summary_mode: bool = False,
 ) -> str:
     lines = [f"# {title}", ""]
 
@@ -34,17 +36,18 @@ def render_report(
         lines += meta + [""]
 
     lines += ["## 核心结论", "", summary, "", "## 关键数字", ""]
-    lines.append(f"- 总销售额：{_fmt(metrics.get('total_sales'))}")
+    lines.append(f"- 总销售额：{_fmt(metrics.get('total_sales'))} {unit}")
     lines.append(f"- 明细行数：{_fmt(metrics.get('line_count'))}")
     order_count = metrics.get("order_count")
     lines.append(f"- 订单量（订单号去重）：{_fmt(order_count) if order_count is not None else '待确认（无完整订单号）'}")
     avg_order_value = metrics.get("avg_order_value")
-    lines.append(f"- 客单价：{_fmt(avg_order_value) if avg_order_value is not None else '待确认（订单量未知）'}")
-    mom = metrics.get("mom_growth")
-    if mom is None:
-        lines.append("- 环比增长率：本表无此数据（需确认对比周数据完整）")
-    else:
-        lines.append(f"- 环比增长率：{mom * 100:.2f}%")
+    lines.append(f"- 客单价：{_fmt(avg_order_value) if avg_order_value is not None else '待确认（订单量未知）'} {unit}")
+    if not summary_mode:
+        mom = metrics.get("mom_growth")
+        if mom is None:
+            lines.append("- 环比增长率：本表无此数据（需确认对比周数据完整）")
+        else:
+            lines.append(f"- 环比增长率：{mom * 100:.2f}%")
 
     lines += ["", "## Top5 商品", ""]
     if not product_ranking_available:

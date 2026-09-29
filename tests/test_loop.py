@@ -32,10 +32,11 @@ def test_end_to_end(tmp_path, sample_df):
     report = out_dir / "report.md"
     assert report.exists()
     content = report.read_text(encoding="utf-8")
-    assert "销售数据周报" in content
-    assert "总销售额：920.00" in content
+    assert "销售数据汇总" in content
+    assert "总销售额：920.00 元" in content
     assert "明细行数：6" in content
     assert "订单量（订单号去重）：6" in content
+    assert "环比增长率" not in content  # 未选报告周 → 汇总模式，无环比
     assert (out_dir / "data_summary.xlsx").exists()
     summary = pd.read_excel(out_dir / "data_summary.xlsx", sheet_name="关键指标")
     assert summary.loc[summary["指标"] == "明细行数", "数值"].iloc[0] == 6

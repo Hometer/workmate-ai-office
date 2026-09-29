@@ -8,7 +8,8 @@ from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -50,6 +51,10 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def workmate_error_handler(request, exc: WorkmateError):
         status = 404 if exc.code == "NOT_FOUND" else 400
         return JSONResponse(status_code=status, content=exc.to_dict())
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_handler(request: Request, exc: RequestValidationError):
+        return JSONResponse(status_code=422, content={"error": {"code": "VALIDATION_ERROR", "message": "请求参数不完整或非法。"}})
 
     def _run_task(task_id: str, file_path: str, req: TaskRequest) -> None:
         try:

@@ -54,8 +54,7 @@ def _to_numeric_sales(df: pd.DataFrame, sales_col) -> pd.Series:
         raise WorkmateError("BAD_SALES_VALUE", f"销售额列有 {int(empty.sum())} 个空值，请补齐或删除这些行。")
     if unparseable.any():
         count = int(unparseable.sum())
-        examples = raw[unparseable].astype(str).head(3).tolist()
-        raise WorkmateError("BAD_SALES_VALUE", f"销售额列有 {count} 个无法解析的值（如 {examples}），请清理后重试。")
+        raise WorkmateError("BAD_SALES_VALUE", f"销售额列有 {count} 个无法解析的值，请清理后重试。")
     if int(numeric.notna().sum()) == 0:
         raise WorkmateError("BAD_SALES_VALUE", "销售额列没有可用的数值。")
     return numeric

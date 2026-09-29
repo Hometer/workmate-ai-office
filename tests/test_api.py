@@ -76,7 +76,7 @@ def test_create_task_and_poll(tmp_path, sample_df):
     assert status == "done"
 
     report = c.get(f"/api/v1/tasks/{task_id}/report").json()["report"]
-    assert "销售数据周报" in report
+    assert "销售数据汇总" in report
     assert c.get(f"/api/v1/tasks/{task_id}/files/data_summary.xlsx").status_code == 200
     chart = c.get(f"/api/v1/tasks/{task_id}/files/charts%2Ftrend.png")
     assert chart.status_code == 200
@@ -88,6 +88,13 @@ def test_create_task_missing_file(tmp_path):
     r = c.post("/api/v1/tasks", json={"file": "nope.xlsx", "instruction": "做成周报", "amount_mode": "A"})
     assert r.status_code == 400
     assert r.json()["error"]["code"] == "FILE_NOT_FOUND"
+
+
+def test_missing_amount_mode_returns_unified_error(tmp_path):
+    c, _ = _client(tmp_path)
+    r = c.post("/api/v1/tasks", json={"file": "x.xlsx", "instruction": "做成周报"})
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
 def test_failed_task_exposes_structured_reason(tmp_path):

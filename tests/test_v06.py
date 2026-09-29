@@ -87,3 +87,67 @@ def test_multi_currency_blocks(tmp_path, sample_df):
     with pytest.raises(WorkmateError) as ei:
         loop.run("做周报", str(xlsx), amount_mode="A")
     assert ei.value.code == "MULTI_CURRENCY"
+
+
+def test_full_table_bad_amount_blocks(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg.data_dir.mkdir()
+    df = pd.DataFrame({"日期": ["2026-09-15", "2026-09-01"], "销售额": [100, "abc"]})
+    xlsx = cfg.data_dir / "s.xlsx"
+    df.to_excel(xlsx, index=False)
+    loop = Loop(cfg)
+    with pytest.raises(WorkmateError) as ei:
+        loop.run("做周报", str(xlsx), amount_mode="A", report_week="2026-09-14")
+    assert ei.value.code == "BAD_SALES_VALUE"
+
+
+def test_change_facts_require_complete(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg.data_dir.mkdir()
+    df = pd.DataFrame({
+        "日期": ["2026-09-07", "2026-09-08", "2026-09-14", "2026-09-15"],
+        "渠道": ["线上", "线上", "线下", "线下"],
+        "销售额": [100, 100, 50, 50],
+    })
+    xlsx = cfg.data_dir / "s.xlsx"
+    df.to_excel(xlsx, index=False)
+    loop = Loop(cfg)
+    result = loop.run("做周报", str(xlsx), amount_mode="A", report_week="2026-09-14", complete={"report": False, "compare": False})
+    assert result["change_facts"] == []
+
+
+def test_b_multi_week_no_mom(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg.data_dir.mkdir()
+    df = pd.DataFrame({
+        "订单号": ["A", "B", "A"],
+        "日期": ["2026-09-01", "2026-09-08", "2026-09-15"],
+        "销售额": [100, 50, 100],
+    })
+    xlsx = cfg.data_dir / "s.xlsx"
+    df.to_excel(xlsx, index=False)
+    loop = Loop(cfg)
+    result = loop.run("做周报", str(xlsx), amount_mode="B", report_week="2026-09-14", complete={"report": True, "compare": True})
+    fact_ids = {f["id"] for f in result["facts"]}
+    assert "mom_growth" not in fact_ids  # 订单 A 跨第 1、3 周
+
+
+def test_single_usd_unit(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg.data_dir.mkdir()
+    df = pd.DataFrame({"销售额": [100, 200], "币种": ["USD", "USD"]})
+    xlsx = cfg.data_dir / "s.xlsx"
+    df.to_excel(xlsx, index=False)
+    loop = Loop(cfg)
+    result = loop.run("做周报", str(xlsx), amount_mode="A")
+    total_fact = next(f for f in result["facts"] if f["id"] == "total_sales")
+    assert total_fact["unit"] == "USD"
+
+
+def test_bad_sales_error_no_raw_value():
+    from workmate.tools import compute
+
+    df = pd.DataFrame({"销售额": [100, "秘密敏感信息123"]})
+    with pytest.raises(WorkmateError) as ei:
+        compute.compute_all(df, {"sales": "销售额"}, "A")
+    assert "秘密敏感信息123" not in ei.value.message
