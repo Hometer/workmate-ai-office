@@ -156,6 +156,9 @@ button.secondary { width: 100%; margin-top: 8px; padding: 9px; border: 1px solid
 .fact-src { display: block; font-size: 11px; color: var(--color-muted); margin-top: 4px; }
 .changes { border-left: 3px solid var(--color-primary); padding-left: 10px; margin-bottom: 12px; font-size: 13px; }
 
+.basis-summary { border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; background: #fbfbfd; margin-bottom: 14px; font-size: 13px; }
+.basis-summary p { margin: 4px 0; }
+
 #result img { max-width: 100%; height: auto; display: block; }
 .history-panel { margin-top: 20px; }
 .history-panel h3 { font-size: 14px; }

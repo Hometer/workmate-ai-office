@@ -26,6 +26,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 class InspectRequest(BaseModel):
     file: str
+    field_mapping: dict | None = None
 
 
 class TaskRequest(BaseModel):
@@ -36,6 +37,7 @@ class TaskRequest(BaseModel):
     report_week: str | None = None
     compare_week: str | None = None
     complete: dict | None = None
+    unit: str | None = None
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -67,6 +69,7 @@ def create_app(config: Config | None = None) -> FastAPI:
                 report_week=req.report_week,
                 compare_week=req.compare_week,
                 complete=req.complete,
+                unit=req.unit,
             )
         except WorkmateError:
             pass  # 任务状态已由 loop 持久化为 failed
@@ -119,7 +122,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.post("/api/v1/inspect")
     def inspect_file(req: InspectRequest):
         p = _resolve_input(req.file)
-        return inspect.inspect_file(p)
+        return inspect.inspect_file(p, field_mapping=req.field_mapping)
 
     @app.post("/api/v1/tasks")
     def create_task(req: TaskRequest):

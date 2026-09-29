@@ -151,3 +151,61 @@ def test_bad_sales_error_no_raw_value():
     with pytest.raises(WorkmateError) as ei:
         compute.compute_all(df, {"sales": "销售额"}, "A")
     assert "秘密敏感信息123" not in ei.value.message
+
+
+def test_empty_compare_week_does_not_block(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg.data_dir.mkdir()
+    df = pd.DataFrame({"日期": ["2026-09-01", "2026-09-15"], "销售额": [100, 200]})
+    xlsx = cfg.data_dir / "s.xlsx"
+    df.to_excel(xlsx, index=False)
+    loop = Loop(cfg)
+    result = loop.run("做周报", str(xlsx), amount_mode="A", report_week="2026-09-14", complete={"report": True, "compare": True})
+    fact_ids = {f["id"] for f in result["facts"]}
+    assert "mom_growth" not in fact_ids
+    assert result["change_facts"] == []
+    report = (Path(result["output_dir"]) / "report.md").read_text(encoding="utf-8")
+    assert "对比周无记录" in report
+
+
+def test_empty_report_week_errors(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg.data_dir.mkdir()
+    df = pd.DataFrame({"日期": ["2026-09-01"], "销售额": [100]})
+    xlsx = cfg.data_dir / "s.xlsx"
+    df.to_excel(xlsx, index=False)
+    loop = Loop(cfg)
+    with pytest.raises(WorkmateError) as ei:
+        loop.run("做周报", str(xlsx), amount_mode="A", report_week="2026-09-14")
+    assert ei.value.code == "REPORT_WEEK_EMPTY"
+
+
+def test_inspect_respects_field_mapping(tmp_path):
+    df = pd.DataFrame({"金额列": [1, 2, 3], "销售列": [10, 20, 30]})
+    p = tmp_path / "x.xlsx"
+    df.to_excel(p, index=False)
+    r = inspect.inspect_file(p, field_mapping={"sales": "销售列"})
+    assert r["mapping"]["sales"] == "销售列"
+    assert r["quality"]["sales"]["valid"] == 3
+
+
+def test_unit_unknown_without_currency(tmp_path, sample_df):
+    cfg = _cfg(tmp_path)
+    cfg.data_dir.mkdir()
+    xlsx = cfg.data_dir / "s.xlsx"
+    sample_df.to_excel(xlsx, index=False)
+    loop = Loop(cfg)
+    result = loop.run("做周报", str(xlsx), amount_mode="A")
+    total = next(f for f in result["facts"] if f["id"] == "total_sales")
+    assert total["unit"] == "单位待确认"
+
+
+def test_summary_mode_fact_label(tmp_path, sample_df):
+    cfg = _cfg(tmp_path)
+    cfg.data_dir.mkdir()
+    xlsx = cfg.data_dir / "s.xlsx"
+    sample_df.to_excel(xlsx, index=False)
+    loop = Loop(cfg)
+    result = loop.run("做周报", str(xlsx), amount_mode="A")
+    total = next(f for f in result["facts"] if f["id"] == "total_sales")
+    assert total["label"] == "全表总销售额"

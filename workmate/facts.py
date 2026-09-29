@@ -20,10 +20,11 @@ def _card(fid, label, value, unit, source_col, formula, rng, excluded, verified)
     }
 
 
-def build_facts(report_metrics: dict, mapping: dict, report_week: str | None, verify_ok: bool, excluded: int = 0, unit: str = "元") -> list[dict]:
+def build_facts(report_metrics: dict, mapping: dict, report_week: str | None, verify_ok: bool, excluded: int = 0, unit: str = "元", summary_mode: bool = False) -> list[dict]:
     facts: list[dict] = []
     rng = report_week or "全表"
-    facts.append(_card("total_sales", "报告周总销售额", _num(report_metrics["total_sales"]), unit, mapping.get("sales"), f"sum(销售额) · 口径{report_metrics.get('amount_mode')}", rng, excluded, verify_ok))
+    total_label = "全表总销售额" if summary_mode else "报告周总销售额"
+    facts.append(_card("total_sales", total_label, _num(report_metrics["total_sales"]), unit, mapping.get("sales"), f"sum(销售额) · 口径{report_metrics.get('amount_mode')}", rng, excluded, verify_ok))
     facts.append(_card("line_count", "明细行数", report_metrics["line_count"], "行", None, "count(明细行)", rng, 0, verify_ok))
     if report_metrics["order_count"] is not None:
         facts.append(_card("order_count", "订单量", report_metrics["order_count"], "单", mapping.get("order"), "count(distinct 订单号)", rng, 0, verify_ok))

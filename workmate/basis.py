@@ -12,6 +12,8 @@ def build_basis(
     metric_formula_version: str,
     verify_result: dict,
     source_fingerprint: str,
+    unit: str = "元",
+    compare_empty: bool = False,
 ) -> dict:
     return {
         "schema_version": 1,
@@ -24,4 +26,6 @@ def build_basis(
         "metric_formula_version": metric_formula_version,
         "verify": verify_result,
         "source_fingerprint": source_fingerprint,
+        "unit": unit,
+        "compare_empty": compare_empty,
     }

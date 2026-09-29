@@ -35,18 +35,18 @@ def detect_currency(df: pd.DataFrame) -> tuple[str | None, int]:
     return None, 0
 
 
-def currency_display_unit(df: pd.DataFrame) -> str:
-    """返回金额显示单位：单一 CNY/人民币→元；单一其它币种→该币种（如 USD）；无币种列→元。"""
+def currency_display_unit(df: pd.DataFrame) -> str | None:
+    """返回识别到的单一币种显示单位；无币种列或无单一值返回 None（不默认元）。"""
     col, distinct = detect_currency(df)
     if col is None or distinct == 0:
-        return "元"
+        return None
     vals = df[col].astype(str).str.strip().unique().tolist()
     if len(vals) == 1:
         low = vals[0].lower()
         if low in ("cny", "rmb", "人民币", "¥", "元"):
             return "元"
         return vals[0]
-    return "元"  # 混合由 MULTI_CURRENCY 阻断，这里不会到达
+    return None
 
 
 def _clean_val(v):
@@ -171,9 +171,13 @@ def week_stats(df: pd.DataFrame, date_col, weeks_list: list) -> list[dict]:
     return out
 
 
-def inspect_file(path, amount_mode=None) -> dict:
+def inspect_file(path, amount_mode=None, field_mapping=None) -> dict:
     df = files.read_table(path)
-    mapping, ambiguities = suggest_mapping(df)
+    if field_mapping:
+        mapping = {k: v for k, v in field_mapping.items() if v}
+        ambiguities: list[str] = []
+    else:
+        mapping, ambiguities = suggest_mapping(df)
     quality = quality_summary(df, mapping)
     pii = detect_pii_columns(df.columns)
     has_date = bool(mapping.get("date"))
@@ -195,5 +199,5 @@ def inspect_file(path, amount_mode=None) -> dict:
         "weeks": [str(w) for w in weeks_list],
         "week_stats": week_stats(df, mapping["date"], weeks_list) if has_date else [],
         "has_date": has_date,
-        "currency": {"column": currency_col, "distinct": currency_distinct},
+        "currency": {"column": currency_col, "distinct": currency_distinct, "unit": currency_display_unit(df)},
     }

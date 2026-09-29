@@ -18,6 +18,7 @@ const state = {
   inspect: null,
   mapping: {},
   amountMode: null,
+  unit: null,
   reportWeek: null,
   compareWeek: null,
   complete: { report: false, compare: false },
@@ -79,6 +80,21 @@ async function viewTask(taskId) {
     taskStatus.className = "status failed";
     taskStatus.textContent = e.message;
   }
+}
+
+function renderSummary(basis) {
+  const mapping = basis.field_mapping || {};
+  const unit = basis.unit || "单位待确认";
+  const scope = basis.report_week ? `报告周 ${basis.report_week} ~ ${weekEnd(basis.report_week)}` : "全表";
+  let html = '<div class="basis-summary">';
+  html += `<p><b>统计范围：</b>${escapeHtml(scope)}</p>`;
+  html += `<p><b>销售额列：</b>${escapeHtml(mapping.sales || "—")} · <b>金额口径：</b>${basis.amount_mode === "B" ? "B 整单金额去重" : "A 每行金额相加"}</p>`;
+  html += `<p><b>金额单位：</b>${escapeHtml(unit)}</p>`;
+  if (basis.compare_week) {
+    html += `<p><b>对比周：</b>${escapeHtml(basis.compare_week)}${basis.compare_empty ? "（无记录）" : ""}</p>`;
+  }
+  html += "</div>";
+  return html;
 }
 
 function statusText(s) {
@@ -171,9 +187,11 @@ function renderInspect() {
   html += "</div>";
 
   html += '<div class="field"><label>金额口径（F2）</label>';
-  html += `<label class="radio"><input type="radio" name="amount" value="A" /> A 每行金额相加</label>`;
-  html += `<label class="radio"><input type="radio" name="amount" value="B" /> B 整单金额去重（需完整订单号）</label>`;
+  html += `<label class="radio"><input type="radio" name="amount" value="A" ${state.amountMode === "A" ? "checked" : ""} /> A 每行金额相加</label>`;
+  html += `<label class="radio"><input type="radio" name="amount" value="B" ${state.amountMode === "B" ? "checked" : ""} /> B 整单金额去重（需完整订单号）</label>`;
   html += "</div>";
+
+  html += '<div class="field"><label>金额单位（留空=待确认）</label><input type="text" id="unit-input" placeholder="如 元 / USD" /></div>';
 
   if (ins.ambiguities && ins.ambiguities.length) {
     html += '<p class="warn">' + ins.ambiguities.map(escapeHtml).join("<br/>") + "</p>";
@@ -185,14 +203,21 @@ function renderInspect() {
   html += '<div id="blockers"></div>';
   inspectResult.innerHTML = html;
 
+  const unitInput = $("#unit-input");
+  unitInput.value = state.unit || ins.currency?.unit || "";
+  unitInput.addEventListener("change", () => (state.unit = unitInput.value.trim() || null));
+
   inspectResult.querySelectorAll("select[data-key]").forEach((sel) => {
     sel.addEventListener("change", () => {
       const key = sel.dataset.key;
-      state.mapping[key] = sel.value || undefined;
-      if (key === "sales") delete state.mapping.sales;
+      const prevDate = state.mapping.date;
       if (sel.value) state.mapping[key] = sel.value;
       else delete state.mapping[key];
-      refreshBlockers();
+      if (key === "date" && prevDate !== state.mapping.date) {
+        state.reportWeek = null;
+        state.complete = { report: false, compare: false };
+      }
+      reInspect();
     });
   });
   inspectResult.querySelectorAll('input[name="amount"]').forEach((r) => {
@@ -202,6 +227,17 @@ function renderInspect() {
     });
   });
   refreshBlockers();
+}
+
+async function reInspect() {
+  try {
+    const res = await apiPost("/api/v1/inspect", { file: state.file, field_mapping: state.mapping });
+    state.inspect = res;
+    state.mapping = { ...res.mapping };
+    renderInspect();
+  } catch (e) {
+    uploadMsg.textContent = e.message;
+  }
 }
 
 function remainingBlockers() {
@@ -309,6 +345,7 @@ async function startGenerate() {
       report_week: state.reportWeek,
       compare_week: state.compareWeek,
       complete: state.complete,
+      unit: state.unit,
     };
     const { task_id } = await apiPost("/api/v1/tasks", body);
     state.currentTaskId = task_id;
@@ -350,6 +387,12 @@ async function renderResult(t) {
   taskStatus.textContent = "已完成";
 
   let html = "";
+  try {
+    const basis = await apiGet(`/api/v1/tasks/${t.task_id}/basis`);
+    html += renderSummary(basis);
+  } catch (e) {
+    /* 依据加载失败时忽略 */
+  }
   try {
     const { facts, change_facts } = await apiGet(`/api/v1/tasks/${t.task_id}/facts`);
     html += '<div class="facts">';
@@ -404,6 +447,7 @@ btnRestart.addEventListener("click", () => {
   state.currentTaskId = null;
   state.inspect = null;
   state.amountMode = null;
+  state.unit = null;
   state.reportWeek = null;
   state.complete = { report: false, compare: false };
   resultEl.innerHTML = '<p class="muted">生成后在这里查看周报、图表与依据。</p>';

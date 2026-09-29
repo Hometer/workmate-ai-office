@@ -80,15 +80,16 @@ def render_report(
     return "\n".join(lines)
 
 
-def conservative_summary(metrics: dict) -> str:
+def conservative_summary(metrics: dict, summary_mode: bool = False) -> str:
     """保守模板：审核/模型失败时的确定性降级总结（不编造，只复述数字）。"""
     parts = [f"总销售额 {_fmt(metrics.get('total_sales'))}", f"明细行数 {_fmt(metrics.get('line_count'))}"]
     order_count = metrics.get("order_count")
     parts.append(f"订单量 {order_count}" if order_count is not None else "订单量 待确认（无完整订单号）")
     avg = metrics.get("avg_order_value")
     parts.append(f"客单价 {_fmt(avg)}" if avg is not None else "客单价 待确认（订单量未知）")
-    mom = metrics.get("mom_growth")
-    parts.append(f"环比增长率 {mom * 100:.2f}%" if mom is not None else "环比增长率 本表无此数据")
+    if not summary_mode:
+        mom = metrics.get("mom_growth")
+        parts.append(f"环比增长率 {mom * 100:.2f}%" if mom is not None else "环比增长率 本表无此数据")
     top5 = metrics.get("top5") or []
     if top5:
         parts.append("Top5 商品：" + "、".join(i["name"] for i in top5))

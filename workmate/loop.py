@@ -54,6 +54,7 @@ class Loop:
         report_week: str | None = None,
         compare_week: str | None = None,
         complete: dict | None = None,
+        unit: str | None = None,
     ) -> dict:
         config = self.config
         config.ensure_dirs()
@@ -69,7 +70,7 @@ class Loop:
         t0 = time.time()
 
         try:
-            result = self._execute(task, file_path, overwrite, field_mapping, amount_mode, report_week, compare_week, complete)
+            result = self._execute(task, file_path, overwrite, field_mapping, amount_mode, report_week, compare_week, complete, unit)
             if self.config.model_provider == "mock":
                 result["changes"] += "（开发期 mock 模式：总结为占位文本，未调用真实模型。）"
                 self.storage.append_log("[task] mock 模式，未调用真实模型")
@@ -95,7 +96,7 @@ class Loop:
             self.storage.append_log(f"[task {task.task_id}] 失败：{error.code}")
             raise error from e
 
-    def _execute(self, task, file_path, overwrite, field_mapping, amount_mode, report_week, compare_week, complete):
+    def _execute(self, task, file_path, overwrite, field_mapping, amount_mode, report_week, compare_week, complete, unit):
         config = self.config
 
         input_path = self._locate(file_path)
@@ -142,12 +143,18 @@ class Loop:
                 )
 
         report_df = weeks.filter_to_week(full_df, mapping["date"], report_monday) if (report_monday and mapping.get("date")) else full_df
+        if len(report_df) == 0:
+            raise WorkmateError("REPORT_WEEK_EMPTY", "所选报告周没有记录，请选择有记录的报告周。")
         report_metrics = compute.compute_all(report_df, mapping, amount_mode)
 
         compare_metrics = None
+        compare_empty = False
         if compare_monday and mapping.get("date"):
             compare_df = weeks.filter_to_week(full_df, mapping["date"], compare_monday)
-            compare_metrics = compute.compute_all(compare_df, mapping, amount_mode)
+            if len(compare_df) == 0:
+                compare_empty = True
+            else:
+                compare_metrics = compute.compute_all(compare_df, mapping, amount_mode)
 
         # G8 B 模式跨任意自然周订单：归属不明确不出环比
         cross_week = False
@@ -160,6 +167,8 @@ class Loop:
                 report_metrics["mom_growth"] = (report_metrics["total_sales"] - prev) / prev
         if cross_week:
             report_metrics.setdefault("warnings", []).append("部分订单跨报告周与对比周，环比暂不可用。")
+        if compare_empty:
+            report_metrics.setdefault("warnings", []).append("对比周无记录，无法比较。")
         self._step(task, "compute_metrics", "done", f"总销售额={report_metrics['total_sales']:,.2f}")
 
         # G9 独立核对：报告周 + 对比周都要通过
@@ -177,7 +186,7 @@ class Loop:
         # P0-8 有日期但未选报告周 → 汇总模式（无环比）
         has_date = bool(mapping.get("date"))
         is_summary_mode = (not has_date) or (has_date and report_monday is None)
-        unit = inspect.currency_display_unit(full_df)
+        unit = inspect.currency_display_unit(full_df) or unit or "单位待确认"
         if is_summary_mode:
             report_metrics["mom_growth"] = None
 
@@ -188,14 +197,14 @@ class Loop:
         self._step(task, "plot_chart", "done", f"{len(chart_files)} 张图")
 
         fingerprint = inspect.file_fingerprint(input_path)
-        facts = facts_mod.build_facts(report_metrics, mapping, str(report_monday) if report_monday else None, True, unit=unit)
-        # P0-2 仅当两周都确认完整才输出变化事实
+        facts = facts_mod.build_facts(report_metrics, mapping, str(report_monday) if report_monday else None, True, unit=unit, summary_mode=is_summary_mode)
+        # P0-2/V7-4 仅当两周都确认完整且非 B 跨周才输出变化事实
         change_facts = []
-        if compare_metrics and (complete or {}).get("report") and (complete or {}).get("compare"):
+        if compare_metrics and (complete or {}).get("report") and (complete or {}).get("compare") and not cross_week:
             change_facts = facts_mod.build_change_facts(report_metrics, compare_metrics, mapping)
         self._step(task, "facts", "done", f"{len(facts)} 张事实卡")
 
-        summary, warning = self._summarize(report_metrics, facts)
+        summary, warning = self._summarize(report_metrics, facts, is_summary_mode)
         self._step(task, "write_summary", "done" if not warning else "done_with_warning", warning)
         self._step(task, "safety_check", "done" if not warning else "done_with_warning", warning or "通过")
 
@@ -225,6 +234,8 @@ class Loop:
             metric_formula_version=METRIC_FORMULA_VERSION,
             verify_result={"passed": True, "report": True, "compare": compare_metrics is not None},
             source_fingerprint=fingerprint,
+            unit=unit,
+            compare_empty=compare_empty,
         )
         files.write_file(task_out / "analysis_basis.json", json.dumps(basis, ensure_ascii=False, indent=2), config.output_dir, overwrite=overwrite)
         self._step(task, "write_files", "done", str(task_out))
@@ -298,12 +309,12 @@ class Loop:
             raise WorkmateError("FILE_NOT_FOUND", "data 目录下没有找到 xlsx/csv，请先放入文件，或用 --file 指定。")
         return matches[0]
 
-    def _summarize(self, metrics: dict, facts: list[dict]) -> tuple[str, str | None]:
+    def _summarize(self, metrics: dict, facts: list[dict], summary_mode: bool = False) -> tuple[str, str | None]:
         for attempt in range(3):
             try:
                 text = (self.provider.complete(SUMMARY_SYSTEM, _facts_text(facts)) or "").strip()
             except WorkmateError as e:
-                return self._fallback_summary(metrics, f"模型不可用：{e.message}")
+                return self._fallback_summary(metrics, f"模型不可用：{e.message}", summary_mode)
             if not text or len(text) > 200:
                 continue
             check = safety.safety_check(text, metrics)
@@ -314,16 +325,16 @@ class Loop:
                     if attempt < 2:
                         self.storage.append_log(f"[task] 总结含数字但未标注事实卡引用，重试 {attempt + 1}/3")
                         continue
-                    return self._fallback_summary(metrics, "总结含数字但未标注事实卡引用")
+                    return self._fallback_summary(metrics, "总结含数字但未标注事实卡引用", summary_mode)
                 return text, None
             if attempt < 2:
                 self.storage.append_log(f"[task] 总结审核未通过，重试 {attempt + 1}/3")
                 continue
-            return self._fallback_summary(metrics, "内容审核未通过")
-        return self._fallback_summary(metrics, "总结生成未达要求")
+            return self._fallback_summary(metrics, "内容审核未通过", summary_mode)
+        return self._fallback_summary(metrics, "总结生成未达要求", summary_mode)
 
-    def _fallback_summary(self, metrics: dict, reason: str) -> tuple[str, str]:
-        text = report_templates.conservative_summary(metrics) + f"\n\n（自动降级：{reason}，请人工复核。）"
+    def _fallback_summary(self, metrics: dict, reason: str, summary_mode: bool = False) -> tuple[str, str]:
+        text = report_templates.conservative_summary(metrics, summary_mode) + f"\n\n（自动降级：{reason}，请人工复核。）"
         return text, reason
 
     def _step(self, task: Task, name: str, status: str, detail: str | None = None) -> None:
