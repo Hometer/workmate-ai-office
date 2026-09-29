@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-MAX_SUMMARY_LEN = 800
+MAX_SUMMARY_LEN = 200
 PLACEHOLDER_MARKERS = ["mock", "[todo]", "待生成", "编造", "占位", "lorem"]
 
 # 金额型数字：绝对值 ≥100 或含小数

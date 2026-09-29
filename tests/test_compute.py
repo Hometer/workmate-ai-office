@@ -68,8 +68,8 @@ def test_bad_sales_value_raises():
     assert ei.value.code == "BAD_SALES_VALUE"
 
 
-def test_empty_sales_cells_ok():
+def test_empty_sales_blocks():
     df = pd.DataFrame({"销售额": [100, None, 200]})
-    m = compute.compute_all(df, {"sales": "销售额"})
-    assert m["total_sales"] == 300.0
-    assert m["line_count"] == 3
+    with pytest.raises(WorkmateError) as ei:
+        compute.compute_all(df, {"sales": "销售额"})
+    assert ei.value.code == "BAD_SALES_VALUE"

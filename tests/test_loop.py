@@ -26,7 +26,7 @@ def test_end_to_end(tmp_path, sample_df):
     before = xlsx.read_bytes()
 
     loop = Loop(cfg)
-    result = loop.run("把 sales.xlsx 做成销售周报", str(xlsx))
+    result = loop.run("把 sales.xlsx 做成销售周报", str(xlsx), amount_mode="A")
 
     out_dir = Path(result["output_dir"])
     report = out_dir / "report.md"
@@ -60,7 +60,7 @@ def test_error_returns_structured(tmp_path):
     cfg = _cfg(tmp_path)
     loop = Loop(cfg)
     try:
-        loop.run("做个周报", str(tmp_path / "missing.xlsx"))
+        loop.run("做个周报", str(tmp_path / "missing.xlsx"), amount_mode="A")
         assert False
     except Exception as e:  # noqa: BLE001
         d = e.to_dict()
@@ -76,7 +76,7 @@ def test_unexpected_failure_is_persisted_without_input_in_log(tmp_path, monkeypa
     monkeypatch.setattr(loop, "_execute", lambda *_: 1 / 0)
     instruction = "私人指令内容"
     try:
-        loop.run(instruction)
+        loop.run(instruction, amount_mode="A")
         assert False
     except Exception as e:  # noqa: BLE001
         assert e.to_dict()["error"]["code"] == "INTERNAL_ERROR"

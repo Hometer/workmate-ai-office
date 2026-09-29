@@ -34,14 +34,18 @@ def _list_close(a: list, b: list) -> bool:
 def _to_numeric_independent(df: pd.DataFrame, col) -> pd.Series:
     raw = df[col]
     out = []
+    empty_count = 0
     for v in raw:
         if v is None or (isinstance(v, float) and pd.isna(v)) or (isinstance(v, str) and v.strip() == ""):
+            empty_count += 1
             out.append(float("nan"))
             continue
         try:
             out.append(float(v))
         except (TypeError, ValueError) as e:
             raise WorkmateError("BAD_SALES_VALUE", "销售额列有无法解析的值。") from e
+    if empty_count:
+        raise WorkmateError("BAD_SALES_VALUE", f"销售额列有 {empty_count} 个空值。")
     return pd.Series(out, index=raw.index)
 
 

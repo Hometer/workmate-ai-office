@@ -45,18 +45,17 @@ def infer_columns(df: pd.DataFrame) -> dict:
 
 
 def _to_numeric_sales(df: pd.DataFrame, sales_col) -> pd.Series:
-    """把销售额列转数值；原本非空但无法解析的值显式报错，不悄悄忽略。"""
+    """把销售额列转数值；空值与无法解析的值都显式阻断，不悄悄忽略。"""
     raw = df[sales_col]
     numeric = pd.to_numeric(raw, errors="coerce")
-    nonempty = raw.notna() & (raw.astype(str).str.strip() != "")
-    bad = nonempty & numeric.isna()
-    if bad.any():
-        count = int(bad.sum())
-        examples = raw[bad].astype(str).head(3).tolist()
-        raise WorkmateError(
-            "BAD_SALES_VALUE",
-            f"销售额列有 {count} 个无法解析的值（如 {examples}），请清理后重试。",
-        )
+    empty = raw.isna() | (raw.astype(str).str.strip() == "")
+    unparseable = (~empty) & numeric.isna()
+    if int(empty.sum()) > 0:
+        raise WorkmateError("BAD_SALES_VALUE", f"销售额列有 {int(empty.sum())} 个空值，请补齐或删除这些行。")
+    if unparseable.any():
+        count = int(unparseable.sum())
+        examples = raw[unparseable].astype(str).head(3).tolist()
+        raise WorkmateError("BAD_SALES_VALUE", f"销售额列有 {count} 个无法解析的值（如 {examples}），请清理后重试。")
     if int(numeric.notna().sum()) == 0:
         raise WorkmateError("BAD_SALES_VALUE", "销售额列没有可用的数值。")
     return numeric

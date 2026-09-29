@@ -12,6 +12,7 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from typing import Literal
 
 from . import inspect
 from .config import Config, load_config
@@ -30,7 +31,7 @@ class TaskRequest(BaseModel):
     file: str
     instruction: str
     field_mapping: dict | None = None
-    amount_mode: str = "A"
+    amount_mode: Literal["A", "B"]
     report_week: str | None = None
     compare_week: str | None = None
     complete: dict | None = None

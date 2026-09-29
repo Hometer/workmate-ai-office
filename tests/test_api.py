@@ -62,7 +62,7 @@ def test_upload_does_not_overwrite_existing_data(tmp_path):
 def test_create_task_and_poll(tmp_path, sample_df):
     c, cfg = _client(tmp_path)
     sample_df.to_excel(cfg.data_dir / "sales.xlsx", index=False)
-    r = c.post("/api/v1/tasks", json={"file": "sales.xlsx", "instruction": "做成销售周报"})
+    r = c.post("/api/v1/tasks", json={"file": "sales.xlsx", "instruction": "做成销售周报", "amount_mode": "A"})
     assert r.status_code == 200
     task_id = r.json()["task_id"]
     assert r.json()["status"] == "running"
@@ -85,7 +85,7 @@ def test_create_task_and_poll(tmp_path, sample_df):
 
 def test_create_task_missing_file(tmp_path):
     c, _ = _client(tmp_path)
-    r = c.post("/api/v1/tasks", json={"file": "nope.xlsx", "instruction": "做成周报"})
+    r = c.post("/api/v1/tasks", json={"file": "nope.xlsx", "instruction": "做成周报", "amount_mode": "A"})
     assert r.status_code == 400
     assert r.json()["error"]["code"] == "FILE_NOT_FOUND"
 
@@ -93,7 +93,7 @@ def test_create_task_missing_file(tmp_path):
 def test_failed_task_exposes_structured_reason(tmp_path):
     c, cfg = _client(tmp_path)
     (cfg.data_dir / "bad.csv").write_text("其他列\n1\n", encoding="utf-8")
-    created = c.post("/api/v1/tasks", json={"file": "bad.csv", "instruction": "做成周报"}).json()
+    created = c.post("/api/v1/tasks", json={"file": "bad.csv", "instruction": "做成周报", "amount_mode": "A"}).json()
     for _ in range(100):
         task = c.get(f"/api/v1/tasks/{created['task_id']}").json()
         if task["status"] == "failed":

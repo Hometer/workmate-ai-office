@@ -28,7 +28,9 @@ const state = {
 init();
 
 async function init() {
-  await Promise.all([loadFiles(), loadMode()]);
+  await Promise.all([loadFiles(), loadMode(), loadHistory()]);
+  const fromUrl = new URLSearchParams(location.search).get("task");
+  if (fromUrl) await viewTask(fromUrl);
 }
 
 async function loadMode() {
@@ -38,6 +40,49 @@ async function loadMode() {
   } catch (e) {
     $("#model-notice").hidden = false;
   }
+}
+
+async function loadHistory() {
+  try {
+    const { tasks } = await apiGet("/api/v1/tasks");
+    const el = $("#history");
+    el.innerHTML = "";
+    if (!tasks.length) {
+      el.innerHTML = '<li class="muted">暂无历史任务</li>';
+      return;
+    }
+    for (const t of tasks.slice(0, 20)) {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="tag ${t.status}">${statusText(t.status)}</span>${escapeHtml(t.instruction || "")}`;
+      li.addEventListener("click", () => viewTask(t.task_id));
+      el.appendChild(li);
+    }
+  } catch (e) {
+    $("#history").innerHTML = '<li class="muted">历史加载失败</li>';
+  }
+}
+
+async function viewTask(taskId) {
+  clearInterval(state.pollTimer);
+  showStep(4);
+  try {
+    const t = await apiGet(`/api/v1/tasks/${taskId}`);
+    if (t.status === "running" || t.status === "created") {
+      state.currentTaskId = taskId;
+      taskStatus.className = "status running";
+      taskStatus.textContent = "正在生成…";
+      pollTask(taskId);
+      return;
+    }
+    await renderResult(t);
+  } catch (e) {
+    taskStatus.className = "status failed";
+    taskStatus.textContent = e.message;
+  }
+}
+
+function statusText(s) {
+  return { created: "待开始", running: "进行中", done: "完成", failed: "失败" }[s] || s;
 }
 
 async function loadFiles() {
@@ -194,7 +239,6 @@ btnWeek.addEventListener("click", () => {
 function renderWeek() {
   const weeks = state.inspect.weeks || [];
   if (!weeks.length) {
-    // 无有效日期 → 汇总模式
     state.reportWeek = null;
     weekResult.innerHTML = '<p class="hint">未识别到有效日期，将生成"销售数据汇总"（不含周环比）。</p>';
     return;
@@ -202,20 +246,29 @@ function renderWeek() {
   const latest = weeks[weeks.length - 1];
   state.reportWeek = state.reportWeek || latest;
   state.compareWeek = prevWeek(state.reportWeek);
+  const stats = state.inspect.week_stats || [];
+  const statOf = (monday) => stats.find((s) => s.monday === monday);
+
   let html = `<div class="field"><label>报告周（周一）</label><select id="week-select">`;
   for (const w of weeks) {
     html += `<option value="${w}" ${w === state.reportWeek ? "selected" : ""}>${w} ~ ${weekEnd(w)}</option>`;
   }
   html += "</select></div>";
-  html += `<p class="hint">对比周（固定为上一自然周）：${state.compareWeek} ~ ${weekEnd(state.compareWeek)}</p>`;
-  html += `<label class="check"><input type="checkbox" id="ck-report" /> 报告周数据完整</label>`;
-  html += `<label class="check"><input type="checkbox" id="ck-compare" /> 对比周数据完整</label>`;
+
+  const r = statOf(state.reportWeek);
+  const c = statOf(state.compareWeek);
+  html += `<p class="quality">报告周：有效行 ${r ? r.valid_rows : 0}，有记录天数 ${r ? r.days_with_data : 0}</p>`;
+  html += `<p class="quality">对比周（上一自然周 ${state.compareWeek} ~ ${weekEnd(state.compareWeek)}）：有效行 ${c ? c.valid_rows : 0}，有记录天数 ${c ? c.days_with_data : 0}</p>`;
+
+  html += `<label class="check"><input type="checkbox" id="ck-report" ${state.complete.report ? "checked" : ""} /> 报告周数据完整</label>`;
+  html += `<label class="check"><input type="checkbox" id="ck-compare" ${state.complete.compare ? "checked" : ""} /> 对比周数据完整</label>`;
   html += '<p class="hint">只有两周都确认完整，才会计算环比。</p>';
   weekResult.innerHTML = html;
 
   $("#week-select").addEventListener("change", (e) => {
     state.reportWeek = e.target.value;
     state.compareWeek = prevWeek(state.reportWeek);
+    state.complete = { report: false, compare: false }; // 切周清空完整性确认
     renderWeek();
   });
   $("#ck-report").addEventListener("change", (e) => (state.complete.report = e.target.checked));

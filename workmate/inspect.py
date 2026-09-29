@@ -1,4 +1,4 @@
-"""数据检查（PRD v0.5 F1）：全表质量、字段映射建议（含歧义）、PII 识别、阻断项。"""
+"""数据检查（PRD v0.6 F1）：全表质量、字段映射建议（含歧义）、PII 识别、周覆盖、币种检测、阻断项。"""
 from __future__ import annotations
 
 import hashlib
@@ -13,6 +13,7 @@ PII_HINTS = [
     "姓名", "电话", "手机", "邮箱", "邮件", "地址", "身份证", "客户", "联系", "联系人",
     "name", "phone", "email", "address", "mobile", "tel", "contact",
 ]
+CURRENCY_HINTS = ["币种", "货币", "currency", "ccy"]
 
 
 def file_fingerprint(path) -> str:
@@ -25,6 +26,34 @@ def file_fingerprint(path) -> str:
 
 def detect_pii_columns(columns) -> list[str]:
     return [str(c) for c in columns if any(hint in str(c).lower() for hint in PII_HINTS)]
+
+
+def detect_currency(df: pd.DataFrame) -> tuple[str | None, int]:
+    for c in df.columns:
+        if any(hint in str(c).lower() for hint in CURRENCY_HINTS):
+            return str(c), int(df[c].astype(str).nunique())
+    return None, 0
+
+
+def _clean_val(v):
+    try:
+        if v is None or pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(v, pd.Timestamp):
+        return v.isoformat()
+    if isinstance(v, (int, float, str, bool)):
+        return v
+    return str(v)
+
+
+def _safe_records(df: pd.DataFrame, limit: int) -> list[dict]:
+    records = []
+    for _, row in df.head(limit).iterrows():
+        rec = {str(k): _clean_val(v) for k, v in row.items()}
+        records.append(rec)
+    return records
 
 
 def _match_columns(df: pd.DataFrame, names: list[str]) -> list:
@@ -91,21 +120,41 @@ def blockers(df: pd.DataFrame, mapping: dict, quality: dict, amount_mode) -> lis
         b.append("缺少销售额列")
     else:
         s = quality.get("sales", {})
+        if s.get("empty", 0) > 0:
+            b.append(f"销售额列有 {s['empty']} 个空值")
         if s.get("unparseable", 0) > 0:
             b.append(f"销售额列有 {s['unparseable']} 个无法解析的值")
         elif s.get("valid", 0) == 0:
             b.append("销售额列没有有效数值")
     if amount_mode is None and mapping.get("sales"):
         b.append("金额口径未确认")
+    currency_col, currency_distinct = detect_currency(df)
+    if currency_distinct > 1:
+        b.append(f"币种列（{currency_col}）有 {currency_distinct} 种币种，不能混算")
     return b
 
 
 def preview(df: pd.DataFrame, mapping: dict, pii_columns: list[str], limit: int = 5) -> list[dict]:
-    cols = [c for c in mapping.values() if c is not None]
-    cols = [c for c in cols if c not in pii_columns]
+    """白名单：仅输出已映射且非 PII 的列；映射失败返回空预览，绝不回退全列。"""
+    cols = [c for c in mapping.values() if c is not None and c not in pii_columns]
     if not cols:
-        cols = list(df.columns)
-    return df[cols].head(limit).to_dict(orient="records")
+        return []
+    return _safe_records(df[cols], limit)
+
+
+def week_stats(df: pd.DataFrame, date_col, weeks_list: list) -> list[dict]:
+    d = pd.to_datetime(df[date_col], errors="coerce")
+    out = []
+    for w in weeks_list:
+        start = pd.Timestamp(w)
+        end = start + pd.Timedelta(days=7)
+        in_week = (d >= start) & (d < end)
+        out.append({
+            "monday": str(w),
+            "valid_rows": int(in_week.sum()),
+            "days_with_data": int(d[in_week].dt.date.nunique()),
+        })
+    return out
 
 
 def inspect_file(path, amount_mode=None) -> dict:
@@ -115,6 +164,7 @@ def inspect_file(path, amount_mode=None) -> dict:
     pii = detect_pii_columns(df.columns)
     has_date = bool(mapping.get("date"))
     weeks_list = weeks.list_weeks(weeks.valid_dates(df, mapping["date"])) if has_date else []
+    currency_col, currency_distinct = detect_currency(df)
     return {
         "summary": {
             "rows": int(len(df)),
@@ -129,5 +179,7 @@ def inspect_file(path, amount_mode=None) -> dict:
         "preview": preview(df, mapping, pii),
         "blockers": blockers(df, mapping, quality, amount_mode),
         "weeks": [str(w) for w in weeks_list],
+        "week_stats": week_stats(df, mapping["date"], weeks_list) if has_date else [],
         "has_date": has_date,
+        "currency": {"column": currency_col, "distinct": currency_distinct},
     }

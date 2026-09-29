@@ -27,7 +27,7 @@ def test_read_outside_data_dir_denied(tmp_path, sample_df):
     sample_df.to_excel(outside, index=False)
     loop = Loop(cfg)
     try:
-        loop.run("做个周报", str(outside))
+        loop.run("做个周报", str(outside), amount_mode="A")
         assert False
     except WorkmateError as e:
         assert e.code == "PERMISSION_DENIED"

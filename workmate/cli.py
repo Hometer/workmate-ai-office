@@ -16,6 +16,7 @@ def main(argv=None) -> int:
     run_p = sub.add_parser("run", help="跑一次周报任务")
     run_p.add_argument("--file", help="xlsx/csv 路径（可选，缺省搜 data 目录）")
     run_p.add_argument("--instruction", required=True, help="任务指令，如：把 sales.xlsx 做成销售周报")
+    run_p.add_argument("--amount-mode", required=True, choices=["A", "B"], help="金额口径：A 每行金额 / B 整单金额去重")
     run_p.add_argument("--force", action="store_true", help="允许覆盖已有成品文件（原始数据文件永不覆盖）")
 
     resume_p = sub.add_parser("resume", help="按任务 ID 查看任务状态/成果")
@@ -31,7 +32,7 @@ def main(argv=None) -> int:
 
     try:
         if args.cmd == "run":
-            result = loop.run(args.instruction, args.file, overwrite=args.force)
+            result = loop.run(args.instruction, args.file, overwrite=args.force, amount_mode=args.amount_mode)
             print(json.dumps(result, ensure_ascii=False, indent=2))
         elif args.cmd == "serve":
             import uvicorn

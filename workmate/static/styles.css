@@ -155,3 +155,20 @@ button.secondary { width: 100%; margin-top: 8px; padding: 9px; border: 1px solid
 .fact-val { display: block; font-size: 18px; font-weight: 700; }
 .fact-src { display: block; font-size: 11px; color: var(--color-muted); margin-top: 4px; }
 .changes { border-left: 3px solid var(--color-primary); padding-left: 10px; margin-bottom: 12px; font-size: 13px; }
+
+#result img { max-width: 100%; height: auto; display: block; }
+.history-panel { margin-top: 20px; }
+.history-panel h3 { font-size: 14px; }
+.history { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; }
+.history li { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 8px; margin-bottom: 6px; cursor: pointer; font-size: 13px; }
+.history li:hover { background: var(--color-bg); }
+.history .tag { font-weight: 600; margin-right: 6px; }
+.history .tag.done { color: var(--color-success); }
+.history .tag.failed { color: var(--color-danger); }
+.history .tag.running { color: var(--color-primary); }
+
+@media (max-width: 768px) {
+  .mapping { grid-template-columns: 1fr; }
+  .facts { grid-template-columns: 1fr 1fr; }
+  .chart-grid { grid-template-columns: 1fr; }
+}
