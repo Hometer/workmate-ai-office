@@ -3,70 +3,77 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WorkMate · 销售数据周报</title>
+  <meta name="theme-color" content="#f5f7fa" />
+  <title>WorkMate · 销售周报工作台</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">W</span>
-      <div>
-        <h1>WorkMate</h1>
-        <p>本地 AI 销售数据周报 · 数据不出你的电脑</p>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="工作区导航">
+      <div class="brand">
+        <span class="logo" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><path d="M8 10h6l6 17 6-17h6L23 32h-6L8 10Z" fill="currentColor"/><path d="M27 8h6v6h-6z" fill="#9CC8FF"/></svg></span>
+        <div class="brand-copy"><strong>WorkMate</strong><span>数据周报工作台</span></div>
+      </div>
+      <div class="sidebar-section-label">工作区</div>
+      <div class="nav-item active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>制作周报</span></div>
+      <div class="history-panel">
+        <div class="history-heading"><h2>最近任务</h2><span>最多 20 条</span></div>
+        <ul id="history" class="history" aria-label="历史任务"></ul>
+      </div>
+      <div class="sidebar-footer">
+        <div class="privacy-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+        <div><strong>本地处理</strong><span>数据保存在你的电脑上</span></div>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>工作区</span><span class="crumb-separator">/</span><strong>销售周报</strong></div>
+        <div class="topbar-meta"><span class="live-dot" aria-hidden="true"></span>本地工作空间</div>
+      </header>
+      <div class="content">
+        <p id="model-notice" class="model-notice" hidden>当前为演示模式：周报总结是占位内容，未调用真实模型。</p>
+        <div class="page-heading">
+          <div><div class="eyebrow">SALES REPORT / 工作台</div><h1>销售周报</h1><p>选择数据表，确认统计口径，生成可核对的周报与图表。</p></div>
+          <div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 90 90" fill="none"><rect x="16" y="18" width="58" height="54" rx="12" fill="#EAF2FF"/><rect x="28" y="48" width="8" height="13" rx="2" fill="#75A9F7"/><rect x="41" y="37" width="8" height="24" rx="2" fill="#4E8CE8"/><rect x="54" y="27" width="8" height="34" rx="2" fill="#245EC2"/><path d="M26 29h14" stroke="#92B5E7" stroke-width="3" stroke-linecap="round"/></svg></div>
+        </div>
+        <ol class="steps" aria-label="制作进度">
+          <li class="step" data-step="1"><span class="step-number">01</span><span>选择数据</span></li>
+          <li class="step" data-step="2"><span class="step-number">02</span><span>检查与口径</span></li>
+          <li class="step" data-step="3" id="step-week"><span class="step-number">03</span><span>选择周次</span></li>
+          <li class="step" data-step="4"><span class="step-number">04</span><span>查看结果</span></li>
+        </ol>
+        <main class="layout">
+          <section class="panel flow-panel" aria-labelledby="flow-title">
+            <div class="panel-heading"><div><span class="panel-kicker">准备数据</span><h2 id="flow-title">选择数据表</h2></div><span class="panel-count" id="flow-count">步骤 1 / 4</span></div>
+            <div id="step-1" class="step-body">
+              <p class="section-intro">从已有文件中选择，或上传一份新的销售表。</p>
+              <div class="field"><label for="file-select">已有数据表</label><select id="file-select"><option value="">加载中…</option></select></div>
+              <div class="field upload-field">
+                <label for="file-upload">上传新数据表</label>
+                <div class="upload-box"><div class="upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></div><strong>选择本地文件</strong><span>支持 .xlsx 和 .csv 格式</span><input type="file" id="file-upload" accept=".xlsx,.csv" aria-label="上传 xlsx 或 csv 数据表" /></div>
+                <p class="hint" id="upload-msg" role="status" aria-live="polite"></p>
+              </div>
+              <button id="btn-inspect" class="primary" disabled>检查数据 <span aria-hidden="true">→</span></button>
+            </div>
+            <div id="step-2" class="step-body" hidden><p class="section-intro">核对字段和金额计算方式，确保周报数字可信。</p><div id="inspect-result"></div><button id="btn-week" class="primary">继续选择周次 <span aria-hidden="true">→</span></button></div>
+            <div id="step-3" class="step-body" hidden><p class="section-intro">确认报告周与对比周的数据是否完整。</p><div id="week-result"></div><button id="btn-generate" class="primary">生成销售周报 <span aria-hidden="true">→</span></button></div>
+            <div id="step-4" class="step-body" hidden><div class="task-progress"><span class="task-progress-icon" aria-hidden="true"></span><p id="task-status" class="status" role="status" aria-live="polite"></p></div><p class="hint">完成后可在右侧查看结果，也能从左侧最近任务重新打开。</p><button id="btn-restart" class="secondary">开始制作新周报</button></div>
+          </section>
+          <section class="panel result" aria-labelledby="result-title">
+            <div class="panel-heading result-heading"><div><span class="panel-kicker">报告中心</span><h2 id="result-title">周报预览</h2></div><span id="result-state" class="result-state">等待生成</span></div>
+            <div id="result">
+              <div class="empty-result">
+                <div class="empty-art" aria-hidden="true"><svg viewBox="0 0 196 148" fill="none"><rect x="30" y="12" width="136" height="124" rx="12" fill="white" stroke="#DDE7F4" stroke-width="2"/><path d="M48 39h62M48 49h39" stroke="#D8E3F0" stroke-width="6" stroke-linecap="round"/><path d="M49 112h98" stroke="#E3EAF3" stroke-width="2"/><rect x="53" y="82" width="16" height="30" rx="3" fill="#C8DBF7"/><rect x="79" y="69" width="16" height="43" rx="3" fill="#9FC0F1"/><rect x="105" y="78" width="16" height="34" rx="3" fill="#6F9EE5"/><rect x="131" y="57" width="16" height="55" rx="3" fill="#356FC9"/><circle cx="157" cy="25" r="9" fill="#DDEAFE"/></svg></div>
+                <h3>你的周报将在这里呈现</h3><p>完成左侧设置后，可查看销售摘要、图表和数据依据，并下载汇总文件。</p>
+                <div class="empty-features"><span>销售概览</span><span>趋势图表</span><span>依据回查</span></div>
+              </div>
+            </div>
+          </section>
+        </main>
+        <p class="content-footer">WorkMate · 本地销售数据周报助手</p>
       </div>
     </div>
-  </header>
-  <p id="model-notice" class="model-notice" hidden>当前为演示模式：周报总结是占位内容，未调用真实模型。</p>
-
-  <main class="layout">
-    <section class="panel">
-      <ol class="steps">
-        <li class="step" data-step="1">1 选表</li>
-        <li class="step" data-step="2">2 检查与口径</li>
-        <li class="step" data-step="3" id="step-week">3 选周</li>
-        <li class="step" data-step="4">4 结果</li>
-      </ol>
-
-      <div id="step-1" class="step-body">
-        <div class="field">
-          <label for="file-select">选择数据表</label>
-          <select id="file-select"><option value="">加载中…</option></select>
-        </div>
-        <div class="field">
-          <label for="file-upload">或上传 xlsx / csv</label>
-          <input type="file" id="file-upload" accept=".xlsx,.csv" />
-          <p class="hint" id="upload-msg"></p>
-        </div>
-        <button id="btn-inspect" class="primary" disabled>下一步：检查数据</button>
-      </div>
-
-      <div id="step-2" class="step-body" hidden>
-        <div id="inspect-result"></div>
-        <button id="btn-week" class="primary">下一步：选周</button>
-      </div>
-
-      <div id="step-3" class="step-body" hidden>
-        <div id="week-result"></div>
-        <button id="btn-generate" class="primary">生成周报</button>
-      </div>
-
-      <div id="step-4" class="step-body" hidden>
-        <p id="task-status" class="status" role="status" aria-live="polite"></p>
-        <button id="btn-restart" class="secondary">重新生成</button>
-      </div>
-
-      <div class="history-panel">
-        <h3>历史任务</h3>
-        <ul id="history"></ul>
-      </div>
-    </section>
-
-    <section class="panel result">
-      <h2>结果</h2>
-      <div id="result"><p class="muted">生成后在这里查看周报、图表与依据。</p></div>
-    </section>
-  </main>
-
+  </div>
   <script type="module" src="app.js"></script>
 </body>
 </html>

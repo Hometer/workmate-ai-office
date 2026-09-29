@@ -12,6 +12,7 @@ const inspectResult = $("#inspect-result");
 const weekResult = $("#week-result");
 const taskStatus = $("#task-status");
 const resultEl = $("#result");
+const emptyResult = resultEl.innerHTML;
 
 const state = {
   file: null,
@@ -26,6 +27,7 @@ const state = {
   pollTimer: null,
 };
 
+showStep(1);
 init();
 
 async function init() {
@@ -49,29 +51,45 @@ async function loadHistory() {
     const el = $("#history");
     el.innerHTML = "";
     if (!tasks.length) {
-      el.innerHTML = '<li class="muted">暂无历史任务</li>';
+      el.innerHTML = '<li class="empty-history">还没有生成记录</li>';
       return;
     }
     for (const t of tasks.slice(0, 20)) {
       const li = document.createElement("li");
-      li.innerHTML = `<span class="tag ${t.status}">${statusText(t.status)}</span>${escapeHtml(t.instruction || "")}`;
-      li.addEventListener("click", () => viewTask(t.task_id));
+      li.dataset.taskId = t.task_id;
+      const button = document.createElement("button");
+      button.type = "button";
+      const fileName = (t.input_file || "销售周报").split(/[\\/]/).pop();
+      const created = new Date(t.created_at);
+      const dateLabel = Number.isNaN(created.getTime()) ? "" : created.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+      button.innerHTML = `<span class="history-top"><span class="tag ${t.status}">${statusText(t.status)}</span><small>${escapeHtml(dateLabel)}</small></span><span class="history-name">${escapeHtml(fileName)}</span>`;
+      button.setAttribute("aria-label", `${statusText(t.status)}：${fileName}${dateLabel ? "，" + dateLabel : ""}`);
+      button.classList.toggle("active", t.task_id === state.currentTaskId);
+      button.addEventListener("click", () => viewTask(t.task_id));
+      li.appendChild(button);
       el.appendChild(li);
     }
   } catch (e) {
-    $("#history").innerHTML = '<li class="muted">历史加载失败</li>';
+    $("#history").innerHTML = '<li class="empty-history">历史加载失败</li>';
   }
 }
 
 async function viewTask(taskId) {
   clearInterval(state.pollTimer);
+  state.currentTaskId = taskId;
+  document.querySelectorAll("#history button").forEach((button) => button.classList.remove("active"));
+  const selected = [...document.querySelectorAll("#history button")].find((button) => button.parentElement?.dataset.taskId === taskId);
+  if (selected) selected.classList.add("active");
   showStep(4);
+  setResultState("running", "正在读取");
+  resultEl.innerHTML = '<div class="result-pending"><span class="pending-spinner" aria-hidden="true"></span><strong>正在读取周报</strong><p>请稍候，正在获取保存的结果。</p></div>';
   try {
     const t = await apiGet(`/api/v1/tasks/${taskId}`);
     if (t.status === "running" || t.status === "created") {
       state.currentTaskId = taskId;
       taskStatus.className = "status running";
       taskStatus.textContent = "正在生成…";
+      setResultState("running", "生成中");
       pollTask(taskId);
       return;
     }
@@ -79,6 +97,7 @@ async function viewTask(taskId) {
   } catch (e) {
     taskStatus.className = "status failed";
     taskStatus.textContent = e.message;
+    setResultState("failed", "读取失败");
   }
 }
 
@@ -336,6 +355,8 @@ async function startGenerate() {
   showStep(4);
   taskStatus.className = "status running";
   taskStatus.textContent = "正在生成…";
+  setResultState("running", "生成中");
+  resultEl.innerHTML = '<div class="result-pending"><span class="pending-spinner" aria-hidden="true"></span><strong>正在整理周报</strong><p>生成结束后，销售摘要和图表会出现在这里。</p></div>';
   try {
     const body = {
       file: state.file,
@@ -353,6 +374,8 @@ async function startGenerate() {
   } catch (e) {
     taskStatus.className = "status failed";
     taskStatus.textContent = e.message;
+    setResultState("failed", "生成失败");
+    resultEl.innerHTML = emptyResult;
   }
 }
 
@@ -381,10 +404,12 @@ async function renderResult(t) {
     taskStatus.className = "status failed";
     taskStatus.textContent = "任务失败：" + (t.error?.message || "请重试");
     resultEl.innerHTML = "";
+    setResultState("failed", "生成失败");
     return;
   }
-  taskStatus.className = "status success";
-  taskStatus.textContent = "已完成";
+  taskStatus.className = "status running";
+  taskStatus.textContent = "正在加载结果…";
+  setResultState("running", "整理结果");
 
   let html = "";
   try {
@@ -397,7 +422,7 @@ async function renderResult(t) {
     const { facts, change_facts } = await apiGet(`/api/v1/tasks/${t.task_id}/facts`);
     html += '<div class="facts">';
     for (const f of facts) {
-      html += `<div class="fact"><b>${escapeHtml(f.label)}</b><span class="fact-val">${escapeHtml(fmtValue(f.value))}${f.unit ? " " + escapeHtml(f.unit) : ""}</span><span class="fact-src">来源 ${escapeHtml(f.source_col || "—")} · ${escapeHtml(f.formula || "")}${f.verified ? " · 已核对" : ""}</span></div>`;
+      html += `<div class="fact"><b>${escapeHtml(f.label)}</b><span class="fact-val">${escapeHtml(fmtFactValue(f))}</span><span class="fact-src">来源 ${escapeHtml(f.source_col || "—")} · ${escapeHtml(f.formula || "")}${f.verified ? " · 已核对" : ""}</span></div>`;
     }
     html += "</div>";
     if (change_facts && change_facts.length) {
@@ -434,6 +459,9 @@ async function renderResult(t) {
   html += ` <a class="download" href="/api/v1/tasks/${t.task_id}/files/analysis_basis.json" download>下载依据文件</a>`;
 
   resultEl.innerHTML = html || '<p class="muted">暂无结果</p>';
+  taskStatus.className = "status success";
+  taskStatus.textContent = "已完成";
+  setResultState("success", "已完成");
   resultEl.querySelectorAll("img").forEach((img) => {
     img.addEventListener("error", () => {
       const holder = img.closest(".chart-item");
@@ -450,21 +478,41 @@ btnRestart.addEventListener("click", () => {
   state.unit = null;
   state.reportWeek = null;
   state.complete = { report: false, compare: false };
-  resultEl.innerHTML = '<p class="muted">生成后在这里查看周报、图表与依据。</p>';
+  resultEl.innerHTML = emptyResult;
+  setResultState("", "等待生成");
   showStep(1);
 });
 
 function showStep(n) {
+  const titles = ["选择数据表", "检查数据与口径", "选择报告周次", "查看生成结果"];
+  $("#flow-title").textContent = titles[n - 1];
+  $("#flow-count").textContent = `步骤 ${n} / 4`;
   for (let i = 1; i <= 4; i++) {
     document.getElementById(`step-${i}`).hidden = i !== n;
-    document.querySelector(`.step[data-step="${i}"]`).classList.toggle("active", i === n);
+    const step = document.querySelector(`.step[data-step="${i}"]`);
+    step.classList.toggle("active", i === n);
+    step.classList.toggle("completed", i < n);
+    if (i === n) step.setAttribute("aria-current", "step");
+    else step.removeAttribute("aria-current");
   }
+}
+
+function setResultState(kind, label) {
+  const badge = $("#result-state");
+  badge.className = `result-state ${kind}`.trim();
+  badge.textContent = label;
 }
 
 function fmtValue(v) {
   if (v == null) return "待确认";
-  if (typeof v === "object") return JSON.stringify(v);
-  return v;
+  return String(v);
+}
+function fmtFactValue(f) {
+  if (Array.isArray(f.value)) return f.value.map(fmtValue).join("、");
+  if (f.value && typeof f.value === "object") {
+    return Object.entries(f.value).map(([name, value]) => `${name} ${fmtValue(value)}${f.unit || ""}`).join(" · ");
+  }
+  return `${fmtValue(f.value)}${f.value == null || !f.unit ? "" : " " + f.unit}`;
 }
 function fmtSize(n) {
   return n > 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + "MB" : n > 1024 ? (n / 1024).toFixed(1) + "KB" : n + "B";
