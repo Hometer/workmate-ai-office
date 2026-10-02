@@ -14,6 +14,7 @@ def build_basis(
     source_fingerprint: str,
     unit: str = "元",
     compare_empty: bool = False,
+    compare_unavailable_reason: str | None = None,
 ) -> dict:
     return {
         "schema_version": 1,
@@ -28,4 +29,5 @@ def build_basis(
         "source_fingerprint": source_fingerprint,
         "unit": unit,
         "compare_empty": compare_empty,
+        "compare_unavailable_reason": compare_unavailable_reason,
     }

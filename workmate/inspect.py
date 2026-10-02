@@ -8,6 +8,7 @@ import pandas as pd
 
 from . import weeks
 from .tools import compute, files
+from .schemas import WorkmateError
 
 PII_HINTS = [
     "姓名", "电话", "手机", "邮箱", "邮件", "地址", "身份证", "客户", "联系", "联系人",
@@ -92,6 +93,22 @@ def suggest_mapping(df: pd.DataFrame) -> tuple[dict, list[str]]:
     return mapping, ambiguities
 
 
+def validate_mapping(df: pd.DataFrame, mapping: dict) -> dict:
+    """检查业务字段与列名，错误不回显传入值；空选填字段保留未指定语义。"""
+    if not isinstance(mapping, dict):
+        raise WorkmateError("FIELD_MAPPING_INVALID", "字段选择无效，请重新检查并选择当前表格中存在的列。")
+    validated = {}
+    for key, value in mapping.items():
+        if key not in compute.COLUMN_ALIASES:
+            raise WorkmateError("FIELD_MAPPING_INVALID", "字段选择无效，请重新检查并选择当前表格中存在的列。")
+        if value is None or (isinstance(value, str) and value == ""):
+            continue
+        if not isinstance(value, str) or value not in df.columns:
+            raise WorkmateError("FIELD_MAPPING_INVALID", "字段选择无效，请重新检查并选择当前表格中存在的列。")
+        validated[key] = value
+    return validated
+
+
 def quality_summary(df: pd.DataFrame, mapping: dict) -> dict:
     q: dict = {}
     sales_col = mapping.get("sales")
@@ -173,8 +190,8 @@ def week_stats(df: pd.DataFrame, date_col, weeks_list: list) -> list[dict]:
 
 def inspect_file(path, amount_mode=None, field_mapping=None) -> dict:
     df = files.read_table(path)
-    if field_mapping:
-        mapping = {k: v for k, v in field_mapping.items() if v}
+    if field_mapping is not None:
+        mapping = validate_mapping(df, field_mapping)
         ambiguities: list[str] = []
     else:
         mapping, ambiguities = suggest_mapping(df)

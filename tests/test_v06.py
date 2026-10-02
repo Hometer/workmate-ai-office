@@ -71,9 +71,10 @@ def test_b_cross_week_no_mom(tmp_path):
     xlsx = cfg.data_dir / "s.xlsx"
     df.to_excel(xlsx, index=False)
     loop = Loop(cfg)
-    result = loop.run("做周报", str(xlsx), amount_mode="B", report_week="2026-09-14", complete={"report": True, "compare": True})
-    fact_ids = {f["id"] for f in result["facts"]}
-    assert "mom_growth" not in fact_ids  # 跨周订单，环比不可用
+    with pytest.raises(WorkmateError) as ei:
+        loop.run("做周报", str(xlsx), amount_mode="B", report_week="2026-09-14", complete={"report": True, "compare": True})
+    assert ei.value.code == "ORDER_WEEK_AMBIGUOUS"
+    assert loop.storage.list_tasks()[0].result is None  # 无环比，也不交付归属不清的周金额
 
 
 def test_multi_currency_blocks(tmp_path, sample_df):
@@ -127,9 +128,10 @@ def test_b_multi_week_no_mom(tmp_path):
     xlsx = cfg.data_dir / "s.xlsx"
     df.to_excel(xlsx, index=False)
     loop = Loop(cfg)
-    result = loop.run("做周报", str(xlsx), amount_mode="B", report_week="2026-09-14", complete={"report": True, "compare": True})
-    fact_ids = {f["id"] for f in result["facts"]}
-    assert "mom_growth" not in fact_ids  # 订单 A 跨第 1、3 周
+    with pytest.raises(WorkmateError) as ei:
+        loop.run("做周报", str(xlsx), amount_mode="B", report_week="2026-09-14", complete={"report": True, "compare": True})
+    assert ei.value.code == "ORDER_WEEK_AMBIGUOUS"  # 订单 A 跨第 1、3 周，同样拒交
+    assert loop.storage.list_tasks()[0].result is None
 
 
 def test_single_usd_unit(tmp_path):

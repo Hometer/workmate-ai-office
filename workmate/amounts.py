@@ -4,6 +4,7 @@ from __future__ import annotations
 import pandas as pd
 
 from .schemas import WorkmateError
+from . import weeks
 
 
 def order_ids(df: pd.DataFrame, order_col) -> pd.Series:
@@ -13,6 +14,19 @@ def order_ids(df: pd.DataFrame, order_col) -> pd.Series:
 
 def order_complete(ids: pd.Series) -> bool:
     return bool(ids.notna().all() and ids.ne("").all())
+
+
+def ambiguous_order_weeks(df: pd.DataFrame, mapping: dict) -> set:
+    """返回跨自然周订单影响的所有周；在切片前按全表判定归属。"""
+    if not mapping.get("order") or not mapping.get("date"):
+        return set()
+    dates = pd.to_datetime(df[mapping["date"]], errors="coerce")
+    by_order: dict[str, set] = {}
+    for oid, dv in zip(order_ids(df, mapping["order"]), dates):
+        if pd.isna(oid) or oid == "" or pd.isna(dv):
+            continue
+        by_order.setdefault(str(oid), set()).add(weeks.monday_of(pd.Timestamp(dv).date()))
+    return {week for order_weeks in by_order.values() if len(order_weeks) > 1 for week in order_weeks}
 
 
 def total_by_mode(df: pd.DataFrame, mapping: dict, amount_mode: str, sales_numeric: pd.Series) -> tuple[float, list[str]]:

@@ -17,6 +17,9 @@ const emptyResult = resultEl.innerHTML;
 const state = {
   file: null,
   inspect: null,
+  inspectPending: false,
+  inspectError: null,
+  inspectVersion: 0,
   mapping: {},
   amountMode: null,
   unit: null,
@@ -112,6 +115,9 @@ function renderSummary(basis) {
   if (basis.compare_week) {
     html += `<p><b>对比周：</b>${escapeHtml(basis.compare_week)}${basis.compare_empty ? "（无记录）" : ""}</p>`;
   }
+  if (basis.compare_unavailable_reason) {
+    html += `<p class="warn">${escapeHtml(basis.compare_unavailable_reason)}</p>`;
+  }
   html += "</div>";
   return html;
 }
@@ -164,8 +170,13 @@ fileUpload.addEventListener("change", async () => {
 btnInspect.addEventListener("click", async () => {
   if (!fileSelect.value) return;
   state.file = fileSelect.value;
+  const version = ++state.inspectVersion;
+  state.inspectPending = false;
+  state.inspectError = null;
   try {
-    state.inspect = await apiPost("/api/v1/inspect", { file: state.file });
+    const inspected = await apiPost("/api/v1/inspect", { file: state.file });
+    if (version !== state.inspectVersion) return;
+    state.inspect = inspected;
     state.mapping = { ...(state.inspect.mapping || {}) };
     state.amountMode = null;
     renderInspect();
@@ -249,18 +260,29 @@ function renderInspect() {
 }
 
 async function reInspect() {
+  const version = ++state.inspectVersion;
+  state.inspectPending = true;
+  state.inspectError = null;
+  refreshBlockers();
   try {
-    const res = await apiPost("/api/v1/inspect", { file: state.file, field_mapping: state.mapping });
+    const res = await apiPost("/api/v1/inspect", { file: state.file, field_mapping: { ...state.mapping } });
+    if (version !== state.inspectVersion) return;
+    state.inspectPending = false;
     state.inspect = res;
     state.mapping = { ...res.mapping };
     renderInspect();
   } catch (e) {
-    uploadMsg.textContent = e.message;
+    if (version !== state.inspectVersion) return;
+    state.inspectPending = false;
+    state.inspectError = e.message;
+    refreshBlockers();
   }
 }
 
 function remainingBlockers() {
   const b = [];
+  if (state.inspectPending) b.push("正在重新检查字段，请稍候");
+  if (state.inspectError) b.push(`字段检查失败：${state.inspectError} 请重新选择有效字段后继续。`);
   if (!state.mapping.sales) b.push("缺少销售额列");
   if (!state.amountMode) b.push("金额口径未确认");
   const q = state.inspect.quality;
@@ -474,6 +496,9 @@ btnRestart.addEventListener("click", () => {
   clearInterval(state.pollTimer);
   state.currentTaskId = null;
   state.inspect = null;
+  state.inspectVersion++;
+  state.inspectPending = false;
+  state.inspectError = null;
   state.amountMode = null;
   state.unit = null;
   state.reportWeek = null;
@@ -501,6 +526,10 @@ function setResultState(kind, label) {
   const badge = $("#result-state");
   badge.className = `result-state ${kind}`.trim();
   badge.textContent = label;
+  btnRestart.textContent = kind === "failed" ? "返回重新检查" : "开始制作新周报";
+  $("#task-hint").textContent = kind === "failed"
+    ? "请按提示修正数据，或返回重新检查字段和统计口径。"
+    : "完成后可在右侧查看结果，也能从左侧最近任务重新打开。";
 }
 
 function fmtValue(v) {

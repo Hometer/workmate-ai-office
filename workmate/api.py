@@ -24,6 +24,13 @@ from .tools import files as file_tools
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
+class LocalStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 class InspectRequest(BaseModel):
     file: str
     field_mapping: dict | None = None
@@ -129,6 +136,8 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not (req.instruction and req.instruction.strip()):
             raise WorkmateError("BAD_INSTRUCTION", "请填写任务指令")
         p = _resolve_input(req.file)
+        if req.field_mapping is not None:
+            inspect.validate_mapping(file_tools.read_table(p), req.field_mapping)
         task_id = uuid.uuid4().hex[:12]
         executor.submit(_run_task, task_id, str(p), req)
         return {"task_id": task_id, "status": "running"}
@@ -176,5 +185,5 @@ def create_app(config: Config | None = None) -> FastAPI:
         return FileResponse(target)
 
     # 静态前端（挂载在最后，/api 优先匹配）
-    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+    app.mount("/", LocalStaticFiles(directory=str(STATIC_DIR), html=True), name="static")
     return app

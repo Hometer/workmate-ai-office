@@ -107,7 +107,7 @@ class Loop:
         schema = files.describe_schema(full_df)
         self._step(task, "read_file", "done", f"shape={schema['shape']}")
 
-        mapping = {k: v for k, v in (field_mapping or compute.infer_columns(full_df)).items() if v}
+        mapping = inspect.validate_mapping(full_df, field_mapping if field_mapping is not None else compute.infer_columns(full_df))
         if "sales" not in mapping:
             raise WorkmateError("COLUMN_UNKNOWN", "缺少销售额列，无法计算。")
         self._step(task, "infer_columns", "done", str(mapping))
@@ -142,6 +142,14 @@ class Loop:
                     f"日期列有 {int(empty_or_bad.sum())} 个空值或无法解析的值，请修正后重试，或改用'销售数据汇总'（不按周筛选）。",
                 )
 
+        ambiguous_weeks = amounts.ambiguous_order_weeks(full_df, mapping) if amount_mode == "B" else set()
+        cross_week = bool(ambiguous_weeks)
+        if report_monday in ambiguous_weeks:
+            raise WorkmateError(
+                "ORDER_WEEK_AMBIGUOUS",
+                "报告周包含跨周订单，金额归属不明确。请修正订单日期归属，或返回检查页将日期列设为不指定，改做全表汇总。",
+            )
+
         report_df = weeks.filter_to_week(full_df, mapping["date"], report_monday) if (report_monday and mapping.get("date")) else full_df
         if len(report_df) == 0:
             raise WorkmateError("REPORT_WEEK_EMPTY", "所选报告周没有记录，请选择有记录的报告周。")
@@ -149,24 +157,24 @@ class Loop:
 
         compare_metrics = None
         compare_empty = False
+        compare_unavailable_reason = None
         if compare_monday and mapping.get("date"):
             compare_df = weeks.filter_to_week(full_df, mapping["date"], compare_monday)
             if len(compare_df) == 0:
                 compare_empty = True
+            elif compare_monday in ambiguous_weeks:
+                compare_unavailable_reason = "对比周包含跨周订单，金额归属不明确，未计算或核对该周金额。"
             else:
                 compare_metrics = compute.compute_all(compare_df, mapping, amount_mode)
-
-        # G8 B 模式跨任意自然周订单：归属不明确不出环比
-        cross_week = False
-        if amount_mode == "B" and mapping.get("date"):
-            cross_week = self._b_multi_week(full_df, mapping)
 
         if report_metrics["mom_growth"] is None and compare_metrics is not None and (complete or {}).get("report") and (complete or {}).get("compare") and not cross_week:
             prev = compare_metrics["total_sales"]
             if prev and prev != 0:
                 report_metrics["mom_growth"] = (report_metrics["total_sales"] - prev) / prev
         if cross_week:
-            report_metrics.setdefault("warnings", []).append("部分订单跨报告周与对比周，环比暂不可用。")
+            report_metrics.setdefault("warnings", []).append("表中部分订单跨自然周，跨周比较暂不可用。")
+        if compare_unavailable_reason:
+            report_metrics.setdefault("warnings", []).append(compare_unavailable_reason)
         if compare_empty:
             report_metrics.setdefault("warnings", []).append("对比周无记录，无法比较。")
         self._step(task, "compute_metrics", "done", f"总销售额={report_metrics['total_sales']:,.2f}")
@@ -181,7 +189,7 @@ class Loop:
             if c_issues:
                 self._step(task, "verify_metrics", "failed", json.dumps(c_issues, ensure_ascii=False))
                 raise WorkmateError("VERIFY_FAILED", "对比周数字核对不一致：" + json.dumps(c_issues, ensure_ascii=False))
-        self._step(task, "verify_metrics", "done", "数字核对一致（报告周+对比周）")
+        self._step(task, "verify_metrics", "done", "数字核对一致（报告周+对比周）" if compare_metrics is not None else "数字核对一致（本次统计范围；未核对对比周）")
 
         # P0-8 有日期但未选报告周 → 汇总模式（无环比）
         has_date = bool(mapping.get("date"))
@@ -236,6 +244,7 @@ class Loop:
             source_fingerprint=fingerprint,
             unit=unit,
             compare_empty=compare_empty,
+            compare_unavailable_reason=compare_unavailable_reason,
         )
         files.write_file(task_out / "analysis_basis.json", json.dumps(basis, ensure_ascii=False, indent=2), config.output_dir, overwrite=overwrite)
         self._step(task, "write_files", "done", str(task_out))
@@ -255,23 +264,6 @@ class Loop:
             "report_week": report_week,
             "title": title,
         }
-
-    def _b_multi_week(self, full_df, mapping) -> bool:
-        """B 模式：任一订单出现在多个自然周即归属不清（不限于报告/对比周）。"""
-        order_col = mapping.get("order")
-        if not order_col or not mapping.get("date"):
-            return False
-        d = pd.to_datetime(full_df[mapping["date"]], errors="coerce")
-        ids = full_df[order_col].astype("string").str.strip()
-        weeks_of: dict[str, set] = {}
-        for oid, dv in zip(ids, d):
-            if pd.isna(oid) or pd.isna(dv):
-                continue
-            s = str(oid).strip()
-            if s == "":
-                continue
-            weeks_of.setdefault(s, set()).add(weeks.monday_of(pd.Timestamp(dv).date()))
-        return any(len(s) > 1 for s in weeks_of.values())
 
     def _plot(self, report_df, mapping, metrics, charts_dir, amount_mode):
         from .tools.compute import _to_numeric_sales
