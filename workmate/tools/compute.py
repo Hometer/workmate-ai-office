@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import math
 
 from ..schemas import WorkmateError
 from .. import amounts, weeks
@@ -55,6 +56,8 @@ def _to_numeric_sales(df: pd.DataFrame, sales_col) -> pd.Series:
     if unparseable.any():
         count = int(unparseable.sum())
         raise WorkmateError("BAD_SALES_VALUE", f"销售额列有 {count} 个无法解析的值，请清理后重试。")
+    if not numeric.map(math.isfinite).all():
+        raise WorkmateError("BAD_SALES_VALUE", "销售额列有非有限数值，请清理后重试。")
     if int(numeric.notna().sum()) == 0:
         raise WorkmateError("BAD_SALES_VALUE", "销售额列没有可用的数值。")
     return numeric

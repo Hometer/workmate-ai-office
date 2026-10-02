@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#f5f7fa" />
   <title>WorkMate · 销售周报工作台</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=0.8-a" />
 </head>
 <body>
   <div class="app-shell">
@@ -31,11 +31,15 @@
         <div class="topbar-meta"><span class="live-dot" aria-hidden="true"></span>本地工作空间</div>
       </header>
       <div class="content">
-        <p id="model-notice" class="model-notice" hidden>当前为演示模式：周报总结是占位内容，未调用真实模型。</p>
+        <p id="model-notice" class="model-notice" hidden>当前新任务为演示模式：未调用真实模型。历史任务以各自的“总结身份”为准。</p>
         <div class="page-heading">
           <div><div class="eyebrow">SALES REPORT / 工作台</div><h1>销售周报</h1><p>选择数据表，确认统计口径，生成可核对的周报与图表。</p></div>
           <div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 90 90" fill="none"><rect x="16" y="18" width="58" height="54" rx="12" fill="#EAF2FF"/><rect x="28" y="48" width="8" height="13" rx="2" fill="#75A9F7"/><rect x="41" y="37" width="8" height="24" rx="2" fill="#4E8CE8"/><rect x="54" y="27" width="8" height="34" rx="2" fill="#245EC2"/><path d="M26 29h14" stroke="#92B5E7" stroke-width="3" stroke-linecap="round"/></svg></div>
         </div>
+        <details class="environment" id="environment">
+          <summary>环境自检 <span id="environment-state" role="status" aria-live="polite">检查中…</span></summary>
+          <div class="environment-body"><button type="button" class="secondary" id="btn-diagnostics">重新检查环境</button><ul id="environment-checks"></ul></div>
+        </details>
         <ol class="steps" aria-label="制作进度">
           <li class="step" data-step="1"><span class="step-number">01</span><span>选择数据</span></li>
           <li class="step" data-step="2"><span class="step-number">02</span><span>检查与口径</span></li>
@@ -74,6 +78,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=0.8-a"></script>
 </body>
 </html>

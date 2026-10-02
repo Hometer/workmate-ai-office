@@ -25,12 +25,24 @@ def main(argv=None) -> int:
     serve_p = sub.add_parser("serve", help="启动本地网页界面")
     serve_p.add_argument("--host", default="127.0.0.1")
     serve_p.add_argument("--port", type=int, default=8000)
+    sub.add_parser("diagnose", help="检查本地模型与数据/成果目录，不读取业务内容")
 
     args = parser.parse_args(argv)
-    loop = Loop(load_config())
-    loop.storage.recover_interrupted()
-
+    if args.cmd == "diagnose":
+        from .diagnostics import diagnose
+        config = load_config()
+        try:
+            config.ensure_dirs()
+            print(json.dumps(diagnose(config), ensure_ascii=False, indent=2))
+            return 0
+        except Exception:
+            print(json.dumps({"error": {"code": "DIRECTORY_UNAVAILABLE", "message": "无法准备本地目录，请检查 .env 中的数据/成果目录及读写权限。"}}, ensure_ascii=False))
+            return 1
     try:
+        config = load_config()
+        if args.cmd != "serve":
+            loop = Loop(config)
+            loop.storage.recover_interrupted()
         if args.cmd == "run":
             result = loop.run(args.instruction, args.file, overwrite=args.force, amount_mode=args.amount_mode)
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -39,8 +51,9 @@ def main(argv=None) -> int:
 
             from .api import create_app
 
+            app = create_app(config)
             print(f"WorkMate 已启动：http://{args.host}:{args.port}")
-            uvicorn.run(create_app(), host=args.host, port=args.port, log_level="warning")
+            uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
         else:
             task = loop.storage.load_task(args.task_id)
             if task is None:
@@ -49,5 +62,8 @@ def main(argv=None) -> int:
             print(json.dumps(task.model_dump(), ensure_ascii=False, indent=2))
     except WorkmateError as e:
         print(json.dumps(e.to_dict(), ensure_ascii=False, indent=2))
+        return 1
+    except (OSError, ValueError):
+        print(json.dumps({"error": {"code": "LOCAL_STATE_UNAVAILABLE", "message": "无法读取或写入本地状态，请先运行 workmate diagnose，检查数据/成果目录与状态文件；不要删除原表或旧成果。"}}, ensure_ascii=False))
         return 1
     return 0

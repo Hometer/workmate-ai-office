@@ -29,6 +29,7 @@ class Task(BaseModel):
     steps: list[StepRecord] = Field(default_factory=list)
     result: Optional[dict[str, Any]] = None
     error: Optional[dict[str, str]] = None
+    confirmation: dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkmateError(Exception):

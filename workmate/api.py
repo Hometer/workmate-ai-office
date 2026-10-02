@@ -19,6 +19,9 @@ from . import inspect
 from .config import Config, load_config
 from .loop import Loop
 from .schemas import WorkmateError
+from .schemas import Task, now_iso
+from .diagnostics import diagnose
+from .tools import compute
 from .tools import files as file_tools
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -45,6 +48,7 @@ class TaskRequest(BaseModel):
     compare_week: str | None = None
     complete: dict | None = None
     unit: str | None = None
+    confirmation_id: str | None = None
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -65,7 +69,11 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def validation_handler(request: Request, exc: RequestValidationError):
         return JSONResponse(status_code=422, content={"error": {"code": "VALIDATION_ERROR", "message": "请求参数不完整或非法。"}})
 
-    def _run_task(task_id: str, file_path: str, req: TaskRequest) -> None:
+    @app.exception_handler(Exception)
+    async def internal_error_handler(request, exc):
+        return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL_ERROR", "message": "操作失败，请检查本地目录与数据后重试。"}})
+
+    def _run_task(task_id: str, file_path: str, req: TaskRequest, snapshot, confirmation) -> None:
         try:
             loop.run(
                 req.instruction.strip(),
@@ -77,6 +85,8 @@ def create_app(config: Config | None = None) -> FastAPI:
                 compare_week=req.compare_week,
                 complete=req.complete,
                 unit=req.unit,
+                input_snapshot=snapshot,
+                confirmation=confirmation,
             )
         except WorkmateError:
             pass  # 任务状态已由 loop 持久化为 failed
@@ -94,6 +104,10 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.get("/api/v1/health")
     def health():
         return {"status": "ok", "model_provider": config.model_provider}
+
+    @app.get("/api/v1/diagnostics")
+    def diagnostics():
+        return diagnose(config)
 
     @app.get("/api/v1/data-files")
     def data_files():
@@ -129,18 +143,52 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.post("/api/v1/inspect")
     def inspect_file(req: InspectRequest):
         p = _resolve_input(req.file)
-        return inspect.inspect_file(p, field_mapping=req.field_mapping)
+        snapshot = file_tools.read_snapshot(p)
+        result = inspect.inspect_file(p, field_mapping=req.field_mapping, snapshot=snapshot)
+        mapping = inspect.validate_mapping(snapshot.table(), result["mapping"])
+        receipt = loop.storage.save_confirmation(p, snapshot.fingerprint, mapping)
+        return {**result, "confirmation_id": receipt["id"]}
 
     @app.post("/api/v1/tasks")
     def create_task(req: TaskRequest):
         if not (req.instruction and req.instruction.strip()):
             raise WorkmateError("BAD_INSTRUCTION", "请填写任务指令")
         p = _resolve_input(req.file)
+        snapshot = file_tools.read_snapshot(p)
+        df = snapshot.table()
         if req.field_mapping is not None:
-            inspect.validate_mapping(file_tools.read_table(p), req.field_mapping)
+            inspect.validate_mapping(df, req.field_mapping)
+        if req.confirmation_id is not None:
+            receipt = loop.storage.get_confirmation(req.confirmation_id)
+            if receipt is None or receipt.get("file") != str(p.resolve()):
+                raise WorkmateError("CONFIRMATION_INVALID", "检查确认信息无效，请返回重新检查当前表格。")
+            mapping = inspect.validate_mapping(df, req.field_mapping if req.field_mapping is not None else receipt["field_mapping"])
+            if mapping != receipt["field_mapping"]:
+                raise WorkmateError("CONFIRMATION_INVALID", "字段与检查时不同，请返回重新检查当前字段。")
+            if snapshot.fingerprint != receipt["fingerprint"]:
+                raise WorkmateError("SOURCE_CHANGED", "数据表在检查后发生变化，请返回重新检查并确认口径后再生成。")
+            mode = "inspected"
+        else:
+            previous = loop.storage.latest_confirmation(p)
+            if previous and previous["fingerprint"] != snapshot.fingerprint:
+                raise WorkmateError("SOURCE_CHANGED", "数据表在检查后发生变化，请重新检查并确认口径后再生成。")
+            try:
+                inferred = req.field_mapping if req.field_mapping is not None else compute.infer_columns(df)
+            except WorkmateError as exc:
+                if exc.code != "COLUMN_UNKNOWN":
+                    raise
+                inferred = {}  # 保留旧 v1 缺业务列时返回可追踪 failed 任务的契约
+            mapping = inspect.validate_mapping(df, inferred)
+            receipt = loop.storage.save_confirmation(p, snapshot.fingerprint, mapping)
+            mode = "compatibility_inspection"
+        req.field_mapping = mapping
+        confirmation = {**receipt, "mode": mode, "amount_mode": req.amount_mode, "unit": req.unit,
+                        "report_week": req.report_week, "compare_week": req.compare_week,
+                        "complete": req.complete or {}, "confirmed_at": now_iso()}
         task_id = uuid.uuid4().hex[:12]
-        executor.submit(_run_task, task_id, str(p), req)
-        return {"task_id": task_id, "status": "running"}
+        loop.storage.save_task(Task(task_id=task_id, status="running", instruction=req.instruction.strip(), input_file=str(p), confirmation=confirmation))
+        executor.submit(_run_task, task_id, str(p), req, snapshot, confirmation)
+        return {"task_id": task_id, "status": "running", "confirmation_mode": mode}
 
     @app.get("/api/v1/tasks")
     def list_tasks():

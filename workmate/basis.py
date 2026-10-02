@@ -15,6 +15,8 @@ def build_basis(
     unit: str = "元",
     compare_empty: bool = False,
     compare_unavailable_reason: str | None = None,
+    context: dict | None = None,
+    confirmation: dict | None = None,
 ) -> dict:
     return {
         "schema_version": 1,
@@ -30,4 +32,8 @@ def build_basis(
         "unit": unit,
         "compare_empty": compare_empty,
         "compare_unavailable_reason": compare_unavailable_reason,
+        **(context or {}),
+        "confirmation_mode": (confirmation or {}).get("mode"),
+        "inspected_at": (confirmation or {}).get("inspected_at"),
+        "confirmed_at": (confirmation or {}).get("confirmed_at"),
     }

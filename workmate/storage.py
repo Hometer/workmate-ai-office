@@ -6,6 +6,8 @@ import threading
 from pathlib import Path
 
 from .schemas import Task
+from .schemas import WorkmateError, now_iso
+from uuid import uuid4
 
 SCHEMA_VERSION = 2
 
@@ -22,8 +24,43 @@ class Storage:
         self.tasks_path = self.state_dir / "tasks.json"
         self.trace_path = self.state_dir / "trace.jsonl"
         self.app_log_path = self.state_dir / "app.log"
+        self.confirmations_path = self.state_dir / "confirmations.json"
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+
+    def _load_confirmations(self) -> dict:
+        if not self.confirmations_path.exists():
+            return {"schema_version": 1, "records": {}, "latest": {}}
+        try:
+            data = json.loads(self.confirmations_path.read_text(encoding="utf-8"))
+            if data.get("schema_version") != 1 or not isinstance(data["records"], dict) or not isinstance(data["latest"], dict):
+                raise ValueError("invalid state")
+            for key, record in data["records"].items():
+                if not isinstance(record, dict) or record.get("id") != key or not isinstance(record.get("file"), str) or not isinstance(record.get("fingerprint"), str) or len(record["fingerprint"]) != 64 or not isinstance(record.get("field_mapping"), dict):
+                    raise ValueError("invalid receipt")
+            if any(receipt_id not in data["records"] for receipt_id in data["latest"].values()):
+                raise ValueError("missing receipt")
+            return data
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            raise WorkmateError("CONFIRMATION_STATE_INVALID", "检查记录无法读取，请恢复状态文件后重新检查；原表和历史成果未改动。") from exc
+
+    def save_confirmation(self, path: Path, fingerprint: str, mapping: dict) -> dict:
+        with self._lock:
+            state = self._load_confirmations()
+            receipt = {"id": uuid4().hex, "file": str(path.resolve()), "fingerprint": fingerprint, "field_mapping": mapping, "inspected_at": now_iso()}
+            state["records"][receipt["id"]] = receipt
+            state["latest"][receipt["file"]] = receipt["id"]
+            _atomic_write(self.confirmations_path, json.dumps(state, ensure_ascii=False, indent=2))
+            return receipt
+
+    def get_confirmation(self, receipt_id: str) -> dict | None:
+        with self._lock:
+            return self._load_confirmations()["records"].get(receipt_id)
+
+    def latest_confirmation(self, path: Path) -> dict | None:
+        with self._lock:
+            state = self._load_confirmations()
+            return state["records"].get(state["latest"].get(str(path.resolve())))
 
     def save_task(self, task: Task) -> None:
         with self._lock:

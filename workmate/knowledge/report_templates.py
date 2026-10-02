@@ -24,6 +24,7 @@ def render_report(
     channel_share_available: bool = True,
     unit: str = "元",
     summary_mode: bool = False,
+    context: dict | None = None,
 ) -> str:
     lines = [f"# {title}", ""]
 
@@ -32,6 +33,22 @@ def render_report(
         meta.append(f"- 金额口径：{'A（每行金额相加）' if amount_mode == 'A' else 'B（整单金额去重）'}")
     if report_week:
         meta.append(f"- 报告周：{report_week}（该周周一）")
+    ctx = context or {}
+    meta.append(f"- 统计范围：{ctx.get('scope') or ('全表' if summary_mode else report_week or '全表')}")
+    meta.append(f"- 金额单位：{unit}；来源：{'字段识别' if ctx.get('unit_source') == 'field' else '人工声明' if ctx.get('unit_source') == 'user' else '待确认'}")
+    if ctx.get("compare_week"):
+        meta.append(f"- 对比周：{ctx['compare_week']}" + ("（无记录）" if ctx.get("compare_empty") else ""))
+    meta.append("- 数字核对：本次统计范围已核对；不代表业务数据完整。")
+    if not summary_mode:
+        completeness = ctx.get("completeness") or {}
+        meta.append(f"- 人工完整性确认：报告周{'已确认' if completeness.get('report') else '未确认'}，对比周{'已确认' if completeness.get('compare') else '未确认'}。")
+    validation = ctx.get("summary_validation") or {}
+    if validation.get("provider") == "mock":
+        meta.append("- 总结身份：演示模式，未调用真实模型。")
+    elif validation.get("status") == "fallback":
+        meta.append("- 总结身份：确定性降级摘要，真实模型摘要未通过。")
+    elif validation:
+        meta.append("- 总结身份：真实本地模型选择事实，摘要结构与事实校验通过；业务质量仍须人工验收。")
     if meta:
         lines += meta + [""]
 
@@ -56,7 +73,7 @@ def render_report(
         top5 = metrics.get("top5") or []
         if top5:
             for i, item in enumerate(top5, 1):
-                lines.append(f"{i}. {item['name']} — {item['sales']:,.2f}")
+                lines.append(f"{i}. {item['name']} — {item['sales']:,.2f} {unit}")
         else:
             lines.append("本表无此数据")
 
@@ -80,13 +97,13 @@ def render_report(
     return "\n".join(lines)
 
 
-def conservative_summary(metrics: dict, summary_mode: bool = False) -> str:
+def conservative_summary(metrics: dict, summary_mode: bool = False, *, unit: str = "单位待确认") -> str:
     """保守模板：审核/模型失败时的确定性降级总结（不编造，只复述数字）。"""
-    parts = [f"总销售额 {_fmt(metrics.get('total_sales'))}", f"明细行数 {_fmt(metrics.get('line_count'))}"]
+    parts = [f"{'全表总销售额' if summary_mode else '报告周总销售额'} {_fmt(metrics.get('total_sales'))} {unit}", f"明细行数 {_fmt(metrics.get('line_count'))}"]
     order_count = metrics.get("order_count")
     parts.append(f"订单量 {order_count}" if order_count is not None else "订单量 待确认（无完整订单号）")
     avg = metrics.get("avg_order_value")
-    parts.append(f"客单价 {_fmt(avg)}" if avg is not None else "客单价 待确认（订单量未知）")
+    parts.append(f"客单价 {_fmt(avg)} {unit}" if avg is not None else "客单价 待确认（订单量未知）")
     if not summary_mode:
         mom = metrics.get("mom_growth")
         parts.append(f"环比增长率 {mom * 100:.2f}%" if mom is not None else "环比增长率 本表无此数据")

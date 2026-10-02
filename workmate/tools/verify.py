@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import math
 
 from ..schemas import WorkmateError
 from .. import weeks
@@ -18,6 +19,8 @@ def _close(a, b, rel: float = 1e-9, abs_tol: float = 1e-6) -> bool:
         return False
     try:
         fa, fb = float(a), float(b)
+        if not math.isfinite(fa) or not math.isfinite(fb):
+            return False
         return abs(fa - fb) <= max(abs_tol, rel * max(abs(fa), abs(fb)))
     except (TypeError, ValueError):
         return a == b
@@ -41,8 +44,11 @@ def _to_numeric_independent(df: pd.DataFrame, col) -> pd.Series:
             out.append(float("nan"))
             continue
         try:
-            out.append(float(v))
-        except (TypeError, ValueError) as e:
+            value = float(v)
+            if not math.isfinite(value):
+                raise ValueError("nonfinite")
+            out.append(value)
+        except (TypeError, ValueError, OverflowError) as e:
             raise WorkmateError("BAD_SALES_VALUE", "销售额列有无法解析的值。") from e
     if empty_count:
         raise WorkmateError("BAD_SALES_VALUE", f"销售额列有 {empty_count} 个空值。")

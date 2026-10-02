@@ -5,6 +5,7 @@ import requests
 
 from ..schemas import WorkmateError
 from .base import ModelProvider
+from ..diagnostics import local_ollama_host
 
 
 class OllamaProvider(ModelProvider):
@@ -14,6 +15,8 @@ class OllamaProvider(ModelProvider):
         self.timeout = timeout
 
     def complete(self, system: str, user: str) -> str:
+        if not local_ollama_host(self.host):
+            raise WorkmateError("MODEL_CONFIG_INVALID", "默认仅允许本机模型；请恢复本地配置后重试。")
         url = f"{self.host}/api/chat"
         payload = {
             "model": self.model,
@@ -22,11 +25,16 @@ class OllamaProvider(ModelProvider):
                 {"role": "user", "content": user},
             ],
             "stream": False,
+            "format": "json",
         }
         try:
-            resp = requests.post(url, json=payload, timeout=self.timeout)
+            resp = requests.post(url, json=payload, timeout=self.timeout, allow_redirects=False)
+            if 300 <= resp.status_code < 400:
+                raise WorkmateError("MODEL_UNAVAILABLE", "本地模型发生重定向，已阻止发送；请检查本地服务。")
             resp.raise_for_status()
             data = resp.json()
+            if data.get("done") is not True or not isinstance(data.get("message", {}).get("content"), str):
+                raise WorkmateError("MODEL_ERROR", "本地模型未返回完整文本，请检查模型服务后重试。")
             return data["message"]["content"]
         except requests.exceptions.ConnectionError as e:
             raise WorkmateError(

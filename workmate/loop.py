@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import json
-import re
 import time
+import threading
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,6 +14,7 @@ from . import facts as facts_mod
 from . import inspect
 from . import amounts
 from . import weeks
+from . import summary as summary_mod
 from .config import Config
 from .knowledge import report_templates
 from .model import get_provider
@@ -21,15 +22,10 @@ from .schemas import StepRecord, Task, WorkmateError, now_iso
 from .storage import Storage
 from .tools import compute, files, plot, safety, verify
 
-SUMMARY_SYSTEM = """你是 WorkMate 数据周报助手。根据给定的"已核对事实卡"写一段不超过 200 字的中文总结。
-规则：
-1. 只能用事实卡里的数字，绝不编造；没有依据不写建议、原因或预测。
-2. 每个含数字的结论标注卡片编号（如 [total_sales]）。
-3. 先结论后数据，短、有结论，不要空话套话。
-4. 金额口径与周范围以事实卡为准，不得自行改口径。
-输出：纯文本正文，不含任何标题。"""
+SUMMARY_SYSTEM = summary_mod.SYSTEM
 
 METRIC_FORMULA_VERSION = "2026-09-29-v06-1"
+_PLOT_LOCK = threading.Lock()
 
 
 def _facts_text(facts: list[dict]) -> str:
@@ -40,7 +36,12 @@ class Loop:
     def __init__(self, config: Config):
         self.config = config
         self.storage = Storage(config.output_dir)
-        self.provider = get_provider(config)
+        self.provider = None
+        try:
+            self.provider = get_provider(config)
+        except Exception:
+            # 初始化失败也能交付已核对的确定性报告，不记录异常原文。
+            pass
 
     def run(
         self,
@@ -55,6 +56,8 @@ class Loop:
         compare_week: str | None = None,
         complete: dict | None = None,
         unit: str | None = None,
+        input_snapshot: files.TableSnapshot | None = None,
+        confirmation: dict | None = None,
     ) -> dict:
         config = self.config
         config.ensure_dirs()
@@ -65,12 +68,13 @@ class Loop:
 
         task = Task(task_id=task_id or uuid4().hex[:12], instruction=instruction, input_file=file_path or "")
         task.status = "running"
+        task.confirmation = confirmation or {}
         self.storage.save_task(task)
         self.storage.append_log(f"[task {task.task_id}] 开始")
         t0 = time.time()
 
         try:
-            result = self._execute(task, file_path, overwrite, field_mapping, amount_mode, report_week, compare_week, complete, unit)
+            result = self._execute(task, file_path, overwrite, field_mapping, amount_mode, report_week, compare_week, complete, unit, input_snapshot)
             if self.config.model_provider == "mock":
                 result["changes"] += "（开发期 mock 模式：总结为占位文本，未调用真实模型。）"
                 self.storage.append_log("[task] mock 模式，未调用真实模型")
@@ -96,14 +100,20 @@ class Loop:
             self.storage.append_log(f"[task {task.task_id}] 失败：{error.code}")
             raise error from e
 
-    def _execute(self, task, file_path, overwrite, field_mapping, amount_mode, report_week, compare_week, complete, unit):
+    def _execute(self, task, file_path, overwrite, field_mapping, amount_mode, report_week, compare_week, complete, unit, input_snapshot=None):
         config = self.config
 
-        input_path = self._locate(file_path)
+        if input_snapshot is not None and task.confirmation:
+            input_path = Path(task.confirmation.get("file", "")).resolve()
+            if not input_path.is_relative_to(config.data_dir.resolve()):
+                raise WorkmateError("CONFIRMATION_INVALID", "确认记录中的文件不属于授权目录，请重新检查。")
+        else:
+            input_path = self._locate(file_path)
         task.input_file = str(input_path)
         self._step(task, "search_files", "done", str(input_path))
 
-        full_df = files.read_table(input_path)
+        snapshot = input_snapshot or files.read_snapshot(input_path)
+        full_df = snapshot.table()
         schema = files.describe_schema(full_df)
         self._step(task, "read_file", "done", f"shape={schema['shape']}")
 
@@ -111,6 +121,23 @@ class Loop:
         if "sales" not in mapping:
             raise WorkmateError("COLUMN_UNKNOWN", "缺少销售额列，无法计算。")
         self._step(task, "infer_columns", "done", str(mapping))
+        if not task.confirmation:
+            previous = self.storage.latest_confirmation(input_path)
+            if previous and previous["fingerprint"] != snapshot.fingerprint:
+                raise WorkmateError("SOURCE_CHANGED", "数据表在检查后发生变化，请重新检查并确认口径。")
+            receipt = self.storage.save_confirmation(input_path, snapshot.fingerprint, mapping)
+            task.confirmation = {**receipt, "mode": "compatibility_inspection", "amount_mode": amount_mode, "unit": unit,
+                                 "report_week": report_week, "compare_week": compare_week, "complete": complete or {}, "confirmed_at": now_iso()}
+        if task.confirmation.get("fingerprint") != snapshot.fingerprint or task.confirmation.get("field_mapping") != mapping:
+            raise WorkmateError("CONFIRMATION_INVALID", "生成输入与确认记录不一致，请重新检查。")
+        confirmed_parameters = {"amount_mode": amount_mode, "unit": unit, "report_week": report_week,
+                                "compare_week": compare_week, "complete": complete or {}}
+        if any(key in task.confirmation and task.confirmation[key] != value for key, value in confirmed_parameters.items()):
+            raise WorkmateError("CONFIRMATION_INVALID", "统计口径与确认记录不一致，请重新检查并确认。")
+        task.confirmation.update(confirmed_parameters)
+        if complete and (set(complete) - {"report", "compare"} or any(type(v) is not bool for v in complete.values())):
+            raise WorkmateError("CONFIRMATION_INVALID", "数据完整性须由本次人工确认，请重新检查。")
+        self._step(task, "confirm_input", "done", "本次数据版本与口径已保存")
 
         # G10 币种：多币种阻断
         currency_col, currency_distinct = inspect.detect_currency(full_df)
@@ -121,6 +148,8 @@ class Loop:
         compute._to_numeric_sales(full_df, mapping["sales"])
 
         report_monday = weeks.parse_monday(report_week)
+        if report_monday and not mapping.get("date"):
+            raise WorkmateError("REPORT_SCOPE_INVALID", "按周统计需要有效日期字段；请重新检查日期或选择全表汇总。")
 
         # G8 对比周由后端推导并校验相邻
         compare_monday = None
@@ -180,12 +209,12 @@ class Loop:
         self._step(task, "compute_metrics", "done", f"总销售额={report_metrics['total_sales']:,.2f}")
 
         # G9 独立核对：报告周 + 对比周都要通过
-        issues = verify.verify_metrics(files.read_table(input_path), mapping, report_metrics, amount_mode, report_monday)
+        issues = verify.verify_metrics(snapshot.table(), mapping, report_metrics, amount_mode, report_monday)
         if issues:
             self._step(task, "verify_metrics", "failed", json.dumps(issues, ensure_ascii=False))
             raise WorkmateError("VERIFY_FAILED", "数字核对不一致：" + json.dumps(issues, ensure_ascii=False))
         if compare_metrics is not None:
-            c_issues = verify.verify_metrics(files.read_table(input_path), mapping, compare_metrics, amount_mode, compare_monday)
+            c_issues = verify.verify_metrics(snapshot.table(), mapping, compare_metrics, amount_mode, compare_monday)
             if c_issues:
                 self._step(task, "verify_metrics", "failed", json.dumps(c_issues, ensure_ascii=False))
                 raise WorkmateError("VERIFY_FAILED", "对比周数字核对不一致：" + json.dumps(c_issues, ensure_ascii=False))
@@ -194,17 +223,30 @@ class Loop:
         # P0-8 有日期但未选报告周 → 汇总模式（无环比）
         has_date = bool(mapping.get("date"))
         is_summary_mode = (not has_date) or (has_date and report_monday is None)
-        unit = inspect.currency_display_unit(full_df) or unit or "单位待确认"
+        recognized_unit = inspect.currency_display_unit(full_df)
+        unit = recognized_unit or unit or "单位待确认"
+        unit_source = "field" if recognized_unit else "pending" if unit == "单位待确认" else "user"
         if is_summary_mode:
             report_metrics["mom_growth"] = None
 
         task_out = config.output_dir / task.task_id
         charts_dir = task_out / "charts"
         charts_dir.mkdir(parents=True, exist_ok=True)
-        chart_files = self._plot(report_df, mapping, report_metrics, charts_dir, amount_mode)
+        context = {
+            "scope": "全表" if is_summary_mode else f"报告周 {report_monday} ~ {report_monday + pd.Timedelta(days=6)}",
+            "unit": unit, "unit_source": unit_source,
+            "unit_status": "pending" if unit == "单位待确认" else "confirmed",
+            "amount_mode": amount_mode, "report_week": report_week,
+            "compare_week": str(compare_monday) if compare_monday else None,
+            "completeness": complete or {}, "warnings": report_metrics.get("warnings") or [],
+            "compare_empty": compare_empty, "compare_unavailable_reason": compare_unavailable_reason,
+            "summary_mode": is_summary_mode,
+        }
+        with _PLOT_LOCK:
+            chart_files = self._plot(report_df, mapping, report_metrics, charts_dir, amount_mode, context)
         self._step(task, "plot_chart", "done", f"{len(chart_files)} 张图")
 
-        fingerprint = inspect.file_fingerprint(input_path)
+        fingerprint = snapshot.fingerprint
         facts = facts_mod.build_facts(report_metrics, mapping, str(report_monday) if report_monday else None, True, unit=unit, summary_mode=is_summary_mode)
         # P0-2/V7-4 仅当两周都确认完整且非 B 跨周才输出变化事实
         change_facts = []
@@ -212,7 +254,8 @@ class Loop:
             change_facts = facts_mod.build_change_facts(report_metrics, compare_metrics, mapping)
         self._step(task, "facts", "done", f"{len(facts)} 张事实卡")
 
-        summary, warning = self._summarize(report_metrics, facts, is_summary_mode)
+        summary, warning, summary_validation = self._summarize(report_metrics, facts, is_summary_mode, unit)
+        context["summary_validation"] = summary_validation
         self._step(task, "write_summary", "done" if not warning else "done_with_warning", warning)
         self._step(task, "safety_check", "done" if not warning else "done_with_warning", warning or "通过")
 
@@ -228,9 +271,10 @@ class Loop:
             channel_share_available=report_metrics.get("channel_share_available", True),
             unit=unit,
             summary_mode=is_summary_mode,
+            context=context,
         )
         files.write_file(task_out / "report.md", report_md, config.output_dir, input_file=input_path, overwrite=overwrite)
-        files.write_metrics_xlsx(report_metrics, task_out / "data_summary.xlsx", config.output_dir)
+        files.write_metrics_xlsx(report_metrics, task_out / "data_summary.xlsx", config.output_dir, context=context)
 
         basis = basis_mod.build_basis(
             field_mapping=mapping,
@@ -245,12 +289,14 @@ class Loop:
             unit=unit,
             compare_empty=compare_empty,
             compare_unavailable_reason=compare_unavailable_reason,
+            context=context,
+            confirmation=task.confirmation,
         )
         files.write_file(task_out / "analysis_basis.json", json.dumps(basis, ensure_ascii=False, indent=2), config.output_dir, overwrite=overwrite)
         self._step(task, "write_files", "done", str(task_out))
 
         deliverables = ["report.md", "data_summary.xlsx", "analysis_basis.json"] + [f"charts/{c.name}" for c in chart_files]
-        changes = f"在 {task_out} 下生成报告、图表、汇总表与依据文件；原始文件 {input_path.name} 未改动；数字核对一致。"
+        changes = f"在 {task_out} 下生成报告、图表、汇总表与依据文件；按确认的数据版本生成，WorkMate 未修改原始文件 {input_path.name}；数字核对一致。"
         if warning:
             changes += f" 注意：{warning}"
         return {
@@ -263,9 +309,10 @@ class Loop:
             "amount_mode": amount_mode,
             "report_week": report_week,
             "title": title,
+            "summary_validation": summary_validation,
         }
 
-    def _plot(self, report_df, mapping, metrics, charts_dir, amount_mode):
+    def _plot(self, report_df, mapping, metrics, charts_dir, amount_mode, context=None):
         from .tools.compute import _to_numeric_sales
 
         charts: list[Path] = []
@@ -273,15 +320,15 @@ class Loop:
         daily = amounts.daily_trend(report_df, mapping, sales_numeric, amount_mode)
         if daily is not None and len(daily):
             p = charts_dir / "trend.png"
-            plot.plot_trend_series(daily, p)
+            plot.plot_trend_series(daily, p, context=context)
             charts.append(p)
         if metrics.get("product_ranking_available", True) and metrics.get("top5"):
             p = charts_dir / "top5.png"
-            plot.plot_top5(metrics["top5"], p)
+            plot.plot_top5(metrics["top5"], p, context=context)
             charts.append(p)
         if metrics.get("channel_share_available", True) and metrics.get("channel_share"):
             p = charts_dir / "channel.png"
-            plot.plot_channel(metrics["channel_share"], p)
+            plot.plot_channel(metrics["channel_share"], p, context=context)
             charts.append(p)
         return charts
 
@@ -301,33 +348,44 @@ class Loop:
             raise WorkmateError("FILE_NOT_FOUND", "data 目录下没有找到 xlsx/csv，请先放入文件，或用 --file 指定。")
         return matches[0]
 
-    def _summarize(self, metrics: dict, facts: list[dict], summary_mode: bool = False) -> tuple[str, str | None]:
-        for attempt in range(3):
-            try:
-                text = (self.provider.complete(SUMMARY_SYSTEM, _facts_text(facts)) or "").strip()
-            except WorkmateError as e:
-                return self._fallback_summary(metrics, f"模型不可用：{e.message}", summary_mode)
-            if not text or len(text) > 200:
-                continue
-            check = safety.safety_check(text, metrics)
-            if check["pass"]:
-                has_digit = re.search(r"\d", text) is not None
-                has_cite = re.search(r"\[[a-z_]+\]", text) is not None
-                if has_digit and not has_cite:
-                    if attempt < 2:
-                        self.storage.append_log(f"[task] 总结含数字但未标注事实卡引用，重试 {attempt + 1}/3")
-                        continue
-                    return self._fallback_summary(metrics, "总结含数字但未标注事实卡引用", summary_mode)
-                return text, None
-            if attempt < 2:
-                self.storage.append_log(f"[task] 总结审核未通过，重试 {attempt + 1}/3")
-                continue
-            return self._fallback_summary(metrics, "内容审核未通过", summary_mode)
-        return self._fallback_summary(metrics, "总结生成未达要求", summary_mode)
+    def _summarize(self, metrics: dict, facts: list[dict], summary_mode: bool = False, unit: str = "单位待确认"):
+        t0 = time.monotonic()
+        metadata = {
+            "provider": self.config.model_provider,
+            "model": self.config.ollama_model if self.config.model_provider == "ollama" else "mock",
+            "attempts": 0, "first_pass": False, "status": "fallback", "fallback_reason": None,
+        }
 
-    def _fallback_summary(self, metrics: dict, reason: str, summary_mode: bool = False) -> tuple[str, str]:
-        text = report_templates.conservative_summary(metrics, summary_mode) + f"\n\n（自动降级：{reason}，请人工复核。）"
-        return text, reason
+        def finish(text, reason):
+            metadata["elapsed_ms"] = round((time.monotonic() - t0) * 1000)
+            metadata["fallback_reason"] = reason
+            metadata["status"] = "fallback" if reason else "passed"
+            return text, reason, metadata
+
+        def fallback(reason):
+            text = report_templates.conservative_summary(metrics, summary_mode, unit=unit)
+            return finish(text + f"\n\n（自动降级：{reason}，请人工复核。）", reason)
+
+        if self.provider is None:
+            return fallback("模型初始化失败")
+        model_facts = summary_mod.model_facts(facts)
+        for attempt in range(3):
+            metadata["attempts"] = attempt + 1
+            try:
+                raw = self.provider.complete(SUMMARY_SYSTEM, _facts_text(model_facts))
+            except WorkmateError as exc:
+                reason = "本地模型响应超时" if exc.code == "MODEL_TIMEOUT" else "模型不可用，请检查本地服务和配置"
+                return fallback(reason)
+            except Exception:
+                return fallback("模型调用失败")
+            try:
+                text = summary_mod.validate_and_render(raw, model_facts, render_facts=facts)
+            except (ValueError, TypeError, KeyError):
+                self.storage.append_log(f"[task] 总结结构或事实校验未通过，尝试 {attempt + 1}/3")
+                continue
+            metadata["first_pass"] = attempt == 0
+            return finish(text, None)
+        return fallback("总结结构或事实校验未通过")
 
     def _step(self, task: Task, name: str, status: str, detail: str | None = None) -> None:
         task.steps.append(StepRecord(name=name, status=status, detail=detail, finished_at=now_iso()))

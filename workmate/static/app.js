@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiUpload } from "./api.js";
+import { apiGet, apiPost, apiUpload } from "./api.js?v=0.8-a";
 
 const $ = (sel) => document.querySelector(sel);
 const fileSelect = $("#file-select");
@@ -34,7 +34,7 @@ showStep(1);
 init();
 
 async function init() {
-  await Promise.all([loadFiles(), loadMode(), loadHistory()]);
+  await Promise.all([loadFiles(), loadMode(), loadHistory(), loadDiagnostics()]);
   const fromUrl = new URLSearchParams(location.search).get("task");
   if (fromUrl) await viewTask(fromUrl);
 }
@@ -45,6 +45,24 @@ async function loadMode() {
     $("#model-notice").hidden = model_provider !== "mock";
   } catch (e) {
     $("#model-notice").hidden = false;
+  }
+}
+
+$("#btn-diagnostics").addEventListener("click", loadDiagnostics);
+async function loadDiagnostics() {
+  const button = $("#btn-diagnostics");
+  button.disabled = true;
+  $("#environment-state").textContent = "检查中…";
+  try {
+    const data = await apiGet("/api/v1/diagnostics");
+    $("#environment-state").textContent = data.status === "ready" ? "本地环境可用" : "有待处理项";
+    $("#environment-checks").innerHTML = data.checks.map((check) => `<li><strong>${escapeHtml(check.message)}</strong>${check.steps.length ? `<ol>${check.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>` : ""}</li>`).join("");
+    $("#model-notice").hidden = data.model_mode !== "mock";
+  } catch (e) {
+    $("#environment-state").textContent = "环境检查失败";
+    $("#environment-checks").innerHTML = `<li>${escapeHtml(e.message)}；请确认 WorkMate 正在运行后重新检查。</li>`;
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -118,6 +136,15 @@ function renderSummary(basis) {
   if (basis.compare_unavailable_reason) {
     html += `<p class="warn">${escapeHtml(basis.compare_unavailable_reason)}</p>`;
   }
+  html += `<p><b>数字核对：</b>${basis.verify?.passed ? "本次计算结果已核对；业务完整性需人工确认" : "历史任务未记录核对状态"}</p>`;
+  html += `<p><b>单位确认：</b>${basis.unit_status === "confirmed" ? "已确认" : basis.unit_status === "pending" ? "待确认" : "历史任务未记录"}</p>`;
+  if (basis.report_week) {
+    const complete = basis.completeness || {};
+    html += `<p><b>人工完整性：</b>报告周${complete.report ? "已确认" : "未确认"}，对比周${complete.compare ? "已确认" : "未确认"}</p>`;
+  }
+  const validation = basis.summary_validation;
+  const identity = !validation ? "历史任务未记录" : validation.provider === "mock" ? "演示模式，未调用真实模型" : validation.status === "fallback" ? "确定性降级摘要，真实模型摘要未通过" : "真实本地模型摘要已通过结构与事实校验，业务质量待人工验收";
+  html += `<p><b>总结身份：</b>${escapeHtml(identity)}</p>`;
   html += "</div>";
   return html;
 }
@@ -389,6 +416,7 @@ async function startGenerate() {
       compare_week: state.compareWeek,
       complete: state.complete,
       unit: state.unit,
+      confirmation_id: state.inspect?.confirmation_id,
     };
     const { task_id } = await apiPost("/api/v1/tasks", body);
     state.currentTaskId = task_id;

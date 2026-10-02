@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 
 import pandas as pd
+import math
 
 from . import weeks
 from .tools import compute, files
@@ -15,6 +16,7 @@ PII_HINTS = [
     "name", "phone", "email", "address", "mobile", "tel", "contact",
 ]
 CURRENCY_HINTS = ["币种", "货币", "currency", "ccy"]
+KNOWN_CURRENCIES = {"USD", "EUR", "GBP", "JPY", "HKD", "MOP", "TWD", "AUD", "CAD", "CHF", "NZD", "SGD", "KRW", "INR", "THB", "MYR", "IDR", "VND", "BRL", "MXN", "RUB", "ZAR", "AED", "SAR"}
 
 
 def file_fingerprint(path) -> str:
@@ -32,7 +34,9 @@ def detect_pii_columns(columns) -> list[str]:
 def detect_currency(df: pd.DataFrame) -> tuple[str | None, int]:
     for c in df.columns:
         if any(hint in str(c).lower() for hint in CURRENCY_HINTS):
-            return str(c), int(df[c].astype(str).nunique())
+            values = df[c].dropna().astype(str).str.strip()
+            values = values[values.ne("")].str.upper().replace({"RMB": "CNY", "人民币": "CNY", "元": "CNY", "¥": "CNY"})
+            return str(c), int(values.nunique())
     return None, 0
 
 
@@ -41,12 +45,15 @@ def currency_display_unit(df: pd.DataFrame) -> str | None:
     col, distinct = detect_currency(df)
     if col is None or distinct == 0:
         return None
-    vals = df[col].astype(str).str.strip().unique().tolist()
+    if df[col].isna().any() or df[col].astype(str).str.strip().eq("").any():
+        return None
+    vals = df[col].astype(str).str.strip().str.upper().replace({"RMB": "CNY", "人民币": "CNY", "元": "CNY", "¥": "CNY"}).unique().tolist()
     if len(vals) == 1:
         low = vals[0].lower()
         if low in ("cny", "rmb", "人民币", "¥", "元"):
             return "元"
-        return vals[0]
+        if vals[0] in KNOWN_CURRENCIES:
+            return vals[0]
     return None
 
 
@@ -58,6 +65,8 @@ def _clean_val(v):
         pass
     if isinstance(v, pd.Timestamp):
         return v.isoformat()
+    if isinstance(v, float) and not math.isfinite(v):
+        return str(v)
     if isinstance(v, (int, float, str, bool)):
         return v
     return str(v)
@@ -116,7 +125,7 @@ def quality_summary(df: pd.DataFrame, mapping: dict) -> dict:
         raw = df[sales_col]
         numeric = pd.to_numeric(raw, errors="coerce")
         empty = raw.isna() | (raw.astype(str).str.strip() == "")
-        unparseable = (~empty) & numeric.isna()
+        unparseable = (~empty) & (numeric.isna() | ~numeric.map(math.isfinite))
         q["sales"] = {
             "valid": int((~empty & ~unparseable).sum()),
             "empty": int(empty.sum()),
@@ -188,8 +197,9 @@ def week_stats(df: pd.DataFrame, date_col, weeks_list: list) -> list[dict]:
     return out
 
 
-def inspect_file(path, amount_mode=None, field_mapping=None) -> dict:
-    df = files.read_table(path)
+def inspect_file(path, amount_mode=None, field_mapping=None, *, snapshot=None) -> dict:
+    snapshot = snapshot or files.read_snapshot(path)
+    df = snapshot.table()
     if field_mapping is not None:
         mapping = validate_mapping(df, field_mapping)
         ambiguities: list[str] = []
@@ -204,8 +214,8 @@ def inspect_file(path, amount_mode=None, field_mapping=None) -> dict:
         "summary": {
             "rows": int(len(df)),
             "columns": [str(c) for c in df.columns],
-            "file_size": Path(path).stat().st_size,
-            "fingerprint": file_fingerprint(path),
+            "file_size": len(snapshot.content),
+            "fingerprint": snapshot.fingerprint,
         },
         "mapping": mapping,
         "ambiguities": ambiguities,

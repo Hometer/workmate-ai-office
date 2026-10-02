@@ -246,3 +246,10 @@ button.secondary:hover { background: #f2f7fd; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+.environment { background: white; border: 1px solid #dce5f0; border-radius: 12px; margin-bottom: 20px; overflow-wrap: anywhere; }
+.environment summary { cursor: pointer; padding: 14px 18px; font-size: 13px; font-weight: 600; }
+.environment summary span { margin-left: 10px; font-size: 12px; font-weight: 400; color: #52637b; }
+.environment-body { padding: 0 18px 14px; }
+.environment-body button { margin: 0; }
+.environment-body ul { padding-left: 20px; font-size: 12px; line-height: 1.8; }
+.environment-body ol { padding-left: 18px; font-weight: 400; }
