@@ -352,9 +352,9 @@ def test_background_parameters_cannot_change_after_confirmation(cfg):
 def test_new_assets_have_consistent_versioned_urls(cfg):
     client = TestClient(create_app(cfg))
     html = client.get("/").text
-    assert 'styles.css?v=0.8-a' in html and 'app.js?v=0.8-a' in html
-    assert client.get('/styles.css?v=0.8-a').headers['cache-control'] == 'no-cache'
-    assert './api.js?v=0.8-a' in client.get('/app.js?v=0.8-a').text
+    assert 'styles.css?v=0.8-workspace1' in html and 'app.js?v=0.8-workspace1' in html
+    assert client.get('/styles.css?v=0.8-workspace1').headers['cache-control'] == 'no-cache'
+    assert './api.js?v=0.8-workspace1' in client.get('/app.js?v=0.8-workspace1').text
 
 
 def test_cli_startup_directory_error_is_readable_without_traceback(cfg, monkeypatch, capsys):

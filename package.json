@@ -1,0 +1,16 @@
+{
+  "name": "workmate-frontend-checks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint workmate/static/*.js scripts/build-frontend.mjs",
+    "typecheck": "tsc -p tsconfig.frontend.json",
+    "test": "node --test tests/frontend-*.test.mjs",
+    "build": "node scripts/build-frontend.mjs"
+  },
+  "devDependencies": {
+    "eslint": "10.11.0",
+    "globals": "17.13.0",
+    "typescript": "7.0.2"
+  }
+}

@@ -3,81 +3,65 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#f5f7fa" />
-  <title>WorkMate · 销售周报工作台</title>
-  <link rel="stylesheet" href="styles.css?v=0.8-a" />
+  <meta name="theme-color" content="#faf9f7" />
+  <title>WorkMate · 办公工作台</title>
+  <link rel="stylesheet" href="styles.css?v=0.8-workspace1" />
 </head>
 <body>
+  <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-8h6v8"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5h7l2 3h9v12H3ZM3 8h9"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor" stroke="none"/><circle cx="15" cy="17" r="3" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 3v17h17M8 16v-5M13 16V6M18 16v-8"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m5-5-5 5 5 5"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6ZM20 2v4M18 4h4"/></symbol>
+  </defs></svg>
   <div class="app-shell">
     <aside class="sidebar" aria-label="工作区导航">
-      <div class="brand">
-        <span class="logo" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><path d="M8 10h6l6 17 6-17h6L23 32h-6L8 10Z" fill="currentColor"/><path d="M27 8h6v6h-6z" fill="#9CC8FF"/></svg></span>
-        <div class="brand-copy"><strong>WorkMate</strong><span>数据周报工作台</span></div>
-      </div>
-      <div class="sidebar-section-label">工作区</div>
-      <div class="nav-item active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>制作周报</span></div>
-      <div class="history-panel">
-        <div class="history-heading"><h2>最近任务</h2><span>最多 20 条</span></div>
-        <ul id="history" class="history" aria-label="历史任务"></ul>
-      </div>
-      <div class="sidebar-footer">
-        <div class="privacy-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
-        <div><strong>本地处理</strong><span>数据保存在你的电脑上</span></div>
-      </div>
+      <a class="brand" href="?view=home" aria-label="WorkMate 工作台"><span class="logo" aria-hidden="true">w<span>·</span></span><strong>WorkMate</strong><span class="brand-badge">本地版</span></a>
+      <button class="new-task" data-action="new"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>新建周报</span><svg class="icon arrow" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      <nav class="main-nav" aria-label="主要页面">
+        <button class="nav-item active" data-view="home" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>工作台</span></button>
+        <button class="nav-item" data-view="files"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><span>数据文件</span><span id="file-count" class="nav-count"></span></button>
+        <button class="nav-item" data-view="library"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><span>历史成果</span></button>
+      </nav>
+      <div class="history-panel"><div class="history-heading"><h2>最近任务</h2><button class="text-button" data-view="library" aria-label="查看全部历史任务">全部 <span aria-hidden="true">↗</span></button></div><ul id="history" class="history" aria-label="最近任务"><li class="empty-history">正在读取任务…</li></ul></div>
+      <div class="sidebar-bottom"><button class="nav-item" data-view="settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>环境自检</span></button><div class="local-profile"><span class="avatar">W</span><div><strong>我的工作空间</strong><span>数据保存在本机</span></div><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></div></div>
     </aside>
     <div class="workspace">
-      <header class="topbar">
-        <div class="breadcrumbs"><span>工作区</span><span class="crumb-separator">/</span><strong>销售周报</strong></div>
-        <div class="topbar-meta"><span class="live-dot" aria-hidden="true"></span>本地工作空间</div>
-      </header>
-      <div class="content">
-        <p id="model-notice" class="model-notice" hidden>当前新任务为演示模式：未调用真实模型。历史任务以各自的“总结身份”为准。</p>
-        <div class="page-heading">
-          <div><div class="eyebrow">SALES REPORT / 工作台</div><h1>销售周报</h1><p>选择数据表，确认统计口径，生成可核对的周报与图表。</p></div>
-          <div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 90 90" fill="none"><rect x="16" y="18" width="58" height="54" rx="12" fill="#EAF2FF"/><rect x="28" y="48" width="8" height="13" rx="2" fill="#75A9F7"/><rect x="41" y="37" width="8" height="24" rx="2" fill="#4E8CE8"/><rect x="54" y="27" width="8" height="34" rx="2" fill="#245EC2"/><path d="M26 29h14" stroke="#92B5E7" stroke-width="3" stroke-linecap="round"/></svg></div>
-        </div>
-        <details class="environment" id="environment">
-          <summary>环境自检 <span id="environment-state" role="status" aria-live="polite">检查中…</span></summary>
-          <div class="environment-body"><button type="button" class="secondary" id="btn-diagnostics">重新检查环境</button><ul id="environment-checks"></ul></div>
-        </details>
-        <ol class="steps" aria-label="制作进度">
-          <li class="step" data-step="1"><span class="step-number">01</span><span>选择数据</span></li>
-          <li class="step" data-step="2"><span class="step-number">02</span><span>检查与口径</span></li>
-          <li class="step" data-step="3" id="step-week"><span class="step-number">03</span><span>选择周次</span></li>
-          <li class="step" data-step="4"><span class="step-number">04</span><span>查看结果</span></li>
-        </ol>
-        <main class="layout">
-          <section class="panel flow-panel" aria-labelledby="flow-title">
-            <div class="panel-heading"><div><span class="panel-kicker">准备数据</span><h2 id="flow-title">选择数据表</h2></div><span class="panel-count" id="flow-count">步骤 1 / 4</span></div>
-            <div id="step-1" class="step-body">
-              <p class="section-intro">从已有文件中选择，或上传一份新的销售表。</p>
-              <div class="field"><label for="file-select">已有数据表</label><select id="file-select"><option value="">加载中…</option></select></div>
-              <div class="field upload-field">
-                <label for="file-upload">上传新数据表</label>
-                <div class="upload-box"><div class="upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></div><strong>选择本地文件</strong><span>支持 .xlsx 和 .csv 格式</span><input type="file" id="file-upload" accept=".xlsx,.csv" aria-label="上传 xlsx 或 csv 数据表" /></div>
-                <p class="hint" id="upload-msg" role="status" aria-live="polite"></p>
-              </div>
-              <button id="btn-inspect" class="primary" disabled>检查数据 <span aria-hidden="true">→</span></button>
-            </div>
-            <div id="step-2" class="step-body" hidden><p class="section-intro">核对字段和金额计算方式，确保周报数字可信。</p><div id="inspect-result"></div><button id="btn-week" class="primary">继续选择周次 <span aria-hidden="true">→</span></button></div>
-            <div id="step-3" class="step-body" hidden><p class="section-intro">确认报告周与对比周的数据是否完整。</p><div id="week-result"></div><button id="btn-generate" class="primary">生成销售周报 <span aria-hidden="true">→</span></button></div>
-            <div id="step-4" class="step-body" hidden><div class="task-progress"><span class="task-progress-icon" aria-hidden="true"></span><p id="task-status" class="status" role="status" aria-live="polite"></p></div><p class="hint" id="task-hint">完成后可在右侧查看结果，也能从左侧最近任务重新打开。</p><button id="btn-restart" class="secondary">开始制作新周报</button></div>
-          </section>
-          <section class="panel result" aria-labelledby="result-title">
-            <div class="panel-heading result-heading"><div><span class="panel-kicker">报告中心</span><h2 id="result-title">周报预览</h2></div><span id="result-state" class="result-state">等待生成</span></div>
-            <div id="result">
-              <div class="empty-result">
-                <div class="empty-art" aria-hidden="true"><svg viewBox="0 0 196 148" fill="none"><rect x="30" y="12" width="136" height="124" rx="12" fill="white" stroke="#DDE7F4" stroke-width="2"/><path d="M48 39h62M48 49h39" stroke="#D8E3F0" stroke-width="6" stroke-linecap="round"/><path d="M49 112h98" stroke="#E3EAF3" stroke-width="2"/><rect x="53" y="82" width="16" height="30" rx="3" fill="#C8DBF7"/><rect x="79" y="69" width="16" height="43" rx="3" fill="#9FC0F1"/><rect x="105" y="78" width="16" height="34" rx="3" fill="#6F9EE5"/><rect x="131" y="57" width="16" height="55" rx="3" fill="#356FC9"/><circle cx="157" cy="25" r="9" fill="#DDEAFE"/></svg></div>
-                <h3>你的周报将在这里呈现</h3><p>完成左侧设置后，可查看销售摘要、图表和数据依据，并下载汇总文件。</p>
-                <div class="empty-features"><span>销售概览</span><span>趋势图表</span><span>依据回查</span></div>
-              </div>
-            </div>
-          </section>
-        </main>
-        <p class="content-footer">WorkMate · 本地销售数据周报助手</p>
-      </div>
+      <header class="topbar"><div class="breadcrumbs"><span>我的工作空间</span><span class="crumb-separator">/</span><strong id="breadcrumb">工作台</strong></div><div class="topbar-meta"><span class="local-badge"><span class="live-dot"></span>本地处理</span><button class="icon-button" data-view="settings" aria-label="查看环境自检" title="查看环境自检"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></button></div></header>
+      <main class="content">
+        <p id="model-notice" class="model-notice" hidden>当前新任务为演示模式：未调用真实模型。历史任务以各自的总结身份为准。</p>
+        <section id="view-home" class="workspace-view">
+          <div class="page-heading home-heading"><div class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg>让每一份数据都有答案</div><h1>把数据，变成下一步。</h1><p>从一张销售表开始，完成一份清晰、可核对的周报。</p></div>
+          <div id="compose-area" class="compose-area">
+            <ol class="steps" aria-label="制作进度"><li class="step active" data-step="1"><span class="step-number">1</span>选择数据</li><li class="step" data-step="2"><span class="step-number">2</span>确认口径</li><li class="step" data-step="3" id="step-week"><span class="step-number">3</span>选择周次</li><li class="step" data-step="4"><span class="step-number">4</span>查看成果</li></ol>
+            <div class="compose-grid"><section class="panel flow-panel" aria-labelledby="flow-title"><div class="panel-heading"><div class="heading-with-icon"><span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg></span><div><span class="panel-kicker">销售分析</span><h2 id="flow-title" tabindex="-1">开始制作周报</h2></div></div><span id="flow-count" class="panel-count">01 / 04</span></div>
+              <div id="step-1" class="step-body"><p class="section-intro">上传销售表，或选择已有文件。原表始终保持只读。</p><div class="upload-box"><span class="upload-icon"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg></span><strong>点击上传销售数据</strong><span>Excel / CSV · 单文件不超过 20 MB</span><input type="file" id="file-upload" accept=".xlsx,.csv" aria-label="上传 xlsx 或 csv 数据表" /></div><p id="upload-msg" class="hint" role="status" aria-live="polite"></p><div class="field file-field"><label for="file-select">或使用已有数据</label><select id="file-select"><option value="">正在读取数据文件…</option></select></div><button id="btn-inspect" class="primary" disabled>检查数据并继续<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
+              <div id="step-2" class="step-body" hidden><p class="section-intro">核对字段和金额含义，确定数字的计算方式。</p><div id="inspect-result"></div><div class="flow-actions"><button class="secondary back-step" data-step-back="1"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>返回</button><button id="btn-week" class="primary">继续选择周次<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
+              <div id="step-3" class="step-body" hidden><p class="section-intro">选择统计范围，确认业务数据是否完整。</p><div id="week-result"></div><div class="flow-actions"><button class="secondary back-step" data-step-back="2"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>返回</button><button id="btn-generate" class="primary">生成销售周报<svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg></button></div></div>
+              <div id="step-4" class="step-body" hidden><div class="task-progress"><span class="task-progress-icon"></span><p id="task-status" class="status" role="status" aria-live="polite"></p></div><p id="task-hint" class="hint">生成结束后，成果会自动打开，也可从历史任务找回。</p><button id="btn-restart" class="secondary">开始制作新周报</button></div>
+            </section><aside class="delivery-guide"><div class="guide-art" aria-hidden="true"><div class="mini-sheet"><span class="sheet-label">WORKMATE REPORT</span><span class="sheet-title">销售数据周报</span><div class="sheet-lines"><i></i><i></i></div><div class="mini-bars"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="sheet-lines bottom"><i></i><i></i></div></div><span class="guide-seal"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span></div><h3>从数据到交付，一次完成</h3><p>摘要、图表和汇总表集中保存。<br />每一个数字，都能找到依据。</p><div class="guide-features"><span><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>可交付的报告</span><span><svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg>清晰的销售图表</span><span><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>可回查的数据依据</span></div><small>上方为报告排版示意，生成后展示实际数据。</small></aside></div>
+          </div>
+          <section id="recent-section" class="recent-section"><div class="section-heading"><div><h2>接着上次的工作</h2><p>所有任务和成果都在这里，随时回来查看。</p></div><button class="text-button" data-view="library">查看全部<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div><div id="recent-tasks" class="recent-grid"><p class="muted">正在读取任务…</p></div></section>
+        </section>
+        <section id="view-files" class="workspace-view" hidden><div class="section-heading page-section-heading"><div><div class="eyebrow">我的资料</div><h1>数据文件</h1><p>选择一份销售表，开始新的分析。原始文件保持只读。</p></div><button class="primary compact" data-action="upload"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>上传数据</button></div><div class="list-toolbar"><span id="files-description">正在读取…</span><button id="btn-refresh-files" class="text-button">刷新列表</button></div><div id="files-list" class="file-list"></div></section>
+        <section id="view-library" class="workspace-view" hidden><div class="section-heading page-section-heading"><div><div class="eyebrow">我的成果</div><h1>历史成果</h1><p>查找已完成的周报，或继续查看之前的任务。</p></div><button class="primary compact" data-action="new"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>新建周报</button></div><div class="list-toolbar library-toolbar"><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input id="history-search" type="search" placeholder="搜索文件名" aria-label="搜索历史文件名" /></label><div class="filter-group" role="group" aria-label="任务状态筛选"><button class="active" data-filter="all" aria-pressed="true">全部</button><button data-filter="done" aria-pressed="false">已完成</button><button data-filter="running" aria-pressed="false">进行中</button><button data-filter="failed" aria-pressed="false">未成功</button></div><button id="btn-refresh-history" class="text-button">刷新</button></div><p id="library-count" class="list-count" role="status" aria-live="polite"></p><div id="library-list" class="library-list"></div></section>
+        <section id="view-settings" class="workspace-view" hidden><div class="page-section-heading"><div class="eyebrow">工作空间</div><h1>环境自检</h1><p>检查本地模型、数据目录与成果保存是否就绪。</p></div><section id="environment" class="environment panel"><div class="panel-heading"><div><h2>本地运行状态</h2><span id="environment-state" role="status" aria-live="polite">检查中…</span></div><button id="btn-diagnostics" class="secondary compact">重新检查</button></div><ul id="environment-checks"></ul></section><div class="privacy-note"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><div><strong>数据保存在你的电脑上</strong><p>原始销售表、生成结果与任务历史由本地服务保存。检查失败时，按对应的建议修复后重新检查。</p></div></div></section>
+        <section id="view-report" class="workspace-view" hidden><div class="report-page-top"><button class="text-button" data-view="library"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>返回历史成果</button><span id="result-state" class="result-state" role="status">等待生成</span></div><div id="result"><div class="result-pending"><span class="pending-spinner"></span><strong>正在读取成果</strong></div></div></section>
+        <footer class="content-footer"><span>WorkMate</span><span>让数据清楚，让工作轻松。</span></footer>
+      </main>
     </div>
   </div>
-  <script type="module" src="app.js?v=0.8-a"></script>
+  <script type="module" src="app.js?v=0.8-workspace1"></script>
 </body>
 </html>
