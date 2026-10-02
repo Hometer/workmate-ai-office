@@ -9,5 +9,5 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM"]
   },
-  "files": ["workmate/static/workspace.js", "workmate/static/formatters.js", "workmate/static/api.js"]
+  "files": ["workmate/static/workspace.js", "workmate/static/formatters.js", "workmate/static/api.js", "workmate/static/report-view.js"]
 }

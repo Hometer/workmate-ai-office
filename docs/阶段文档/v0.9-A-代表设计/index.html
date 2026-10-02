@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <title>WorkMate v0.9 · 代表设计</title>
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10H3ZM9 20v-7h6v7"/></symbol>
+    <symbol id="file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h6"/></symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="chart" viewBox="0 0 24 24"><path d="M4 3v17h17M8 16v-5M13 16V6M18 16v-8"/></symbol>
+    <symbol id="shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></symbol>
+    <symbol id="link" viewBox="0 0 24 24"><path d="m8 15 7-7M6 10 4 12a4 4 0 0 0 6 6l2-2M12 8l2-2a4 4 0 0 1 6 6l-2 2"/></symbol>
+    <symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol>
+  </defs></svg>
+  <div class="review-bar">
+    <span><strong>v0.9 设计预览</strong><span class="review-description"> · 已授权合成样例，未接入业务提交</span></span>
+    <nav aria-label="代表设计切换"><a href="?page=home" data-page="home">首页</a><a href="?page=fields" data-page="fields">字段确认</a><a href="?page=report" data-page="report">报告</a></nav>
+  </div>
+  <div class="shell">
+    <aside class="sidebar" aria-label="工作区导航">
+      <a class="brand" href="?page=home"><span class="logo">w<span>·</span></span><strong>WorkMate</strong></a>
+      <span class="workspace-name">我的工作空间 <span>本地版</span></span>
+      <a class="button primary new" href="?page=fields"><svg class="icon"><use href="#plus"/></svg>新建周报</a>
+      <nav class="side-nav" aria-label="主要入口">
+        <a href="?page=home" data-nav="home"><svg class="icon"><use href="#home"/></svg>工作台</a>
+        <a href="http://127.0.0.1:8766/?view=files"><svg class="icon"><use href="#file"/></svg>数据文件 <span class="external">↗</span></a>
+        <a href="http://127.0.0.1:8766/?view=library"><svg class="icon"><use href="#clock"/></svg>历史成果 <span class="external">↗</span></a>
+      </nav>
+      <div class="side-section-label">代表报告 <span>合成样例</span></div>
+      <div class="side-reports">
+        <a href="?page=report&sample=normal"><span class="doc-dot"></span><span>09.28 — 10.04 周报<small>USD · 真实本地模型</small></span></a>
+        <a href="?page=report&sample=pending"><span class="doc-dot pending"></span><span>金额单位待确认<small>查看限制的呈现</small></span></a>
+        <a href="?page=report&sample=fallback"><span class="doc-dot pending"></span><span>全表销售汇总<small>JPY · 降级摘要</small></span></a>
+      </div>
+      <div class="side-bottom"><a href="http://127.0.0.1:8766/?view=settings"><svg class="icon"><use href="#settings"/></svg>环境自检 <span>↗</span></a><div class="profile"><span class="avatar">W</span><div><strong>我的工作空间</strong><small>数据保存在本机</small></div><svg class="icon"><use href="#shield"/></svg></div></div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar"><div>我的工作空间 <span>/</span> <strong id="breadcrumb">工作台</strong></div><a href="http://127.0.0.1:8766/" class="live-link">打开当前产品 ↗</a></header>
+      <main id="main" tabindex="-1"><p class="loading" role="status">正在读取设计样例…</p></main>
+      <footer><span>WorkMate</span><span>设计评审 · 数据取自已授权合成样表</span></footer>
+    </div>
+  </div>
+  <dialog id="chart-dialog" aria-labelledby="chart-dialog-title"><div class="dialog-heading"><h2 id="chart-dialog-title">图表设计</h2><button class="button secondary" id="close-dialog">关闭</button></div><div id="dialog-chart"></div><p class="caption">图表样式预览。正式 PNG 样式将在方向确认后开发，历史图片保留。</p></dialog>
+  <script type="module" src="preview.js"></script>
+</body>
+</html>

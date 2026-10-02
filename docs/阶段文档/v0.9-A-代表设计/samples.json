@@ -1,0 +1,389 @@
+{
+  "notice": "设计预览，取样自已授权合成输入的既有真实结果；不是新功能验收。",
+  "scenarios": {
+    "normal": {
+      "taskId": "b22948985b2d",
+      "file": "M38-sales-acceptance.csv",
+      "createdAt": "2026-10-02T10:14:47.701663+00:00",
+      "basis": {
+        "scope": "报告周 2026-09-28 ~ 2026-10-04",
+        "report_week": "2026-09-28",
+        "amount_mode": "A",
+        "unit": "USD",
+        "unit_status": "confirmed",
+        "summary_validation": {
+          "provider": "ollama",
+          "model": "qwen2.5:7b",
+          "attempts": 1,
+          "first_pass": true,
+          "status": "passed",
+          "fallback_reason": null,
+          "elapsed_ms": 43451
+        },
+        "field_mapping": {
+          "sales": "销售额",
+          "date": "日期",
+          "product": "商品",
+          "channel": "渠道",
+          "order": "订单号"
+        },
+        "verify": {
+          "passed": true,
+          "report": true,
+          "compare": true
+        },
+        "warnings": [],
+        "compare_unavailable_reason": null
+      },
+      "facts": [
+        {
+          "id": "total_sales",
+          "label": "报告周总销售额",
+          "value": 600.0,
+          "unit": "USD",
+          "source_col": "销售额",
+          "formula": "sum(销售额) · 口径A",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "line_count",
+          "label": "明细行数",
+          "value": 3,
+          "unit": "行",
+          "source_col": null,
+          "formula": "count(明细行)",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "order_count",
+          "label": "订单量",
+          "value": 3,
+          "unit": "单",
+          "source_col": "订单号",
+          "formula": "count(distinct 订单号)",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "avg_order_value",
+          "label": "客单价",
+          "value": 200.0,
+          "unit": "USD",
+          "source_col": null,
+          "formula": "总销售额 ÷ 订单量",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "mom_growth",
+          "label": "环比增长率",
+          "value": 100.0,
+          "unit": "%",
+          "source_col": "日期",
+          "formula": "(报告周 − 对比周) ÷ 对比周",
+          "range": "2026-09-28 vs 上一周",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "top5",
+          "label": "Top5 商品",
+          "value": [
+            "本册",
+            "笔",
+            "纸张"
+          ],
+          "unit": null,
+          "source_col": "商品",
+          "formula": "按商品销售额降序取前 5",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "channel_share",
+          "label": "渠道占比",
+          "value": {
+            "线上": 87.58,
+            "门店": 12.42
+          },
+          "unit": "%",
+          "source_col": "渠道",
+          "formula": "各渠道销售额 ÷ 总销售额",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        }
+      ],
+      "changes": [
+        {
+          "dimension": "渠道",
+          "name": "线上",
+          "delta": 425.5,
+          "direction": "增加",
+          "contribution_pct": 141.8,
+          "total_change": 300.0
+        },
+        {
+          "dimension": "渠道",
+          "name": "门店",
+          "delta": -125.5,
+          "direction": "减少",
+          "contribution_pct": null,
+          "total_change": 300.0
+        }
+      ],
+      "core": "报告周总销售额 600.00 USD [total_sales]。",
+      "products": [
+        {
+          "name": "本册",
+          "value": 400.0
+        },
+        {
+          "name": "笔",
+          "value": 125.5
+        },
+        {
+          "name": "纸张",
+          "value": 74.5
+        }
+      ]
+    },
+    "pending": {
+      "taskId": "caae902ef41d",
+      "file": "S07-金额单位待确认.csv",
+      "createdAt": "2026-10-02T09:10:27.144694+00:00",
+      "basis": {
+        "scope": "报告周 2026-09-28 ~ 2026-10-04",
+        "report_week": "2026-09-28",
+        "amount_mode": "A",
+        "unit": "单位待确认",
+        "unit_status": "pending",
+        "summary_validation": {
+          "provider": "ollama",
+          "model": "qwen2.5:7b",
+          "attempts": 1,
+          "first_pass": true,
+          "status": "passed",
+          "fallback_reason": null,
+          "elapsed_ms": 19871
+        },
+        "field_mapping": {
+          "date": "日期",
+          "order": "订单号",
+          "sales": "销售额",
+          "product": "商品",
+          "channel": "渠道"
+        },
+        "verify": {
+          "passed": true,
+          "report": true,
+          "compare": true
+        },
+        "warnings": [],
+        "compare_unavailable_reason": null
+      },
+      "facts": [
+        {
+          "id": "total_sales",
+          "label": "报告周总销售额",
+          "value": 150.0,
+          "unit": "单位待确认",
+          "source_col": "销售额",
+          "formula": "sum(销售额) · 口径A",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "line_count",
+          "label": "明细行数",
+          "value": 2,
+          "unit": "行",
+          "source_col": null,
+          "formula": "count(明细行)",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "order_count",
+          "label": "订单量",
+          "value": 2,
+          "unit": "单",
+          "source_col": "订单号",
+          "formula": "count(distinct 订单号)",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "avg_order_value",
+          "label": "客单价",
+          "value": 75.0,
+          "unit": "单位待确认",
+          "source_col": null,
+          "formula": "总销售额 ÷ 订单量",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "mom_growth",
+          "label": "环比增长率",
+          "value": 50.0,
+          "unit": "%",
+          "source_col": "日期",
+          "formula": "(报告周 − 对比周) ÷ 对比周",
+          "range": "2026-09-28 vs 上一周",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "top5",
+          "label": "Top5 商品",
+          "value": [
+            "笔",
+            "紙张"
+          ],
+          "unit": null,
+          "source_col": "商品",
+          "formula": "按商品销售额降序取前 5",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "channel_share",
+          "label": "渠道占比",
+          "value": {
+            "线上": 66.67,
+            "门店": 33.33
+          },
+          "unit": "%",
+          "source_col": "渠道",
+          "formula": "各渠道销售额 ÷ 总销售额",
+          "range": "2026-09-28",
+          "excluded": 0,
+          "verified": true
+        }
+      ],
+      "changes": [],
+      "core": "报告周总销售额 150.00 单位待确认 [total_sales]；环比增长率 50.00 %（增长） [mom_growth]。",
+      "products": [
+        {
+          "name": "笔",
+          "value": 100.0
+        },
+        {
+          "name": "紙张",
+          "value": 50.0
+        }
+      ]
+    },
+    "fallback": {
+      "taskId": "8e668fd2f7c1",
+      "file": "S10-全表B日元汇总.xlsx",
+      "createdAt": "2026-10-02T09:20:55.882348+00:00",
+      "basis": {
+        "scope": "全表",
+        "report_week": null,
+        "amount_mode": "B",
+        "unit": "JPY",
+        "unit_status": "confirmed",
+        "summary_validation": {
+          "provider": "ollama",
+          "model": "qwen2.5:7b",
+          "attempts": 1,
+          "first_pass": false,
+          "status": "fallback",
+          "fallback_reason": "模型不可用，请检查本地服务和配置",
+          "elapsed_ms": 3056
+        },
+        "field_mapping": {
+          "sales": "销售额",
+          "date": "日期",
+          "product": "商品",
+          "channel": "渠道",
+          "order": "订单号"
+        },
+        "verify": {
+          "passed": true,
+          "report": true,
+          "compare": false
+        },
+        "warnings": [],
+        "compare_unavailable_reason": null
+      },
+      "facts": [
+        {
+          "id": "total_sales",
+          "label": "全表总销售额",
+          "value": 3000.0,
+          "unit": "JPY",
+          "source_col": "销售额",
+          "formula": "sum(销售额) · 口径B",
+          "range": "全表",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "line_count",
+          "label": "明细行数",
+          "value": 3,
+          "unit": "行",
+          "source_col": null,
+          "formula": "count(明细行)",
+          "range": "全表",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "order_count",
+          "label": "订单量",
+          "value": 2,
+          "unit": "单",
+          "source_col": "订单号",
+          "formula": "count(distinct 订单号)",
+          "range": "全表",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "avg_order_value",
+          "label": "客单价",
+          "value": 1500.0,
+          "unit": "JPY",
+          "source_col": null,
+          "formula": "总销售额 ÷ 订单量",
+          "range": "全表",
+          "excluded": 0,
+          "verified": true
+        },
+        {
+          "id": "channel_share",
+          "label": "渠道占比",
+          "value": {
+            "线上": 33.33,
+            "门店": 66.67
+          },
+          "unit": "%",
+          "source_col": "渠道",
+          "formula": "各渠道销售额 ÷ 总销售额",
+          "range": "全表",
+          "excluded": 0,
+          "verified": true
+        }
+      ],
+      "changes": [],
+      "core": "全表总销售额 3,000.00 JPY；明细行数 3；订单量 2；客单价 1,500.00 JPY。\n\n（自动降级：模型不可用，请检查本地服务和配置，请人工复核。）",
+      "products": []
+    }
+  }
+}

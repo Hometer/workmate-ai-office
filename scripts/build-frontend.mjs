@@ -3,7 +3,7 @@ import { resolve, basename } from "node:path";
 import assert from "node:assert/strict";
 const source = resolve("workmate/static");
 const output = resolve("outputs/frontend-dist");
-const assets = ["index.html", "styles.css", "app.js", "api.js", "formatters.js", "workspace.js"];
+const assets = ["index.html", "styles.css", "app.js", "api.js", "formatters.js", "workspace.js", "report-view.js"];
 const html = await readFile(resolve(source, "index.html"), "utf8");
 const version = html.match(/app\.js\?v=([^"\s]+)/)?.[1];
 assert.ok(version, "HTML needs a versioned application module");

@@ -1,6 +1,7 @@
-import { apiGet, apiPost, apiUpload } from "./api.js?v=0.8-workspace1";
-import { formatChangeFact } from "./formatters.js?v=0.8-workspace1";
-import { fileName, filterTasks, summaryIdentity, reportSection, shareWidth, taskProgress } from "./workspace.js?v=0.8-workspace1";
+import { citationFacts, renderMarkdown, renderReportDocument } from "./report-view.js?v=0.9-reading1";
+import { apiGet, apiPost, apiUpload } from "./api.js?v=0.9-reading1";
+import { formatChangeFact } from "./formatters.js?v=0.9-reading1";
+import { fileName, filterTasks, summaryIdentity, reportSection, shareWidth, taskProgress } from "./workspace.js?v=0.9-reading1";
 
 const $ = (sel) => document.querySelector(sel);
 const fileSelect = $("#file-select");
@@ -147,6 +148,11 @@ async function loadHistory() {
     const { tasks } = await apiGet("/api/v1/tasks");
     if (version !== state.historyVersion) return;
     state.tasks = tasks;
+    $("#view-home").classList.toggle("has-history", tasks.length > 0);
+    $("#home-description").textContent = tasks.length
+      ? "接着上次的工作，或开始一份新的销售报告。"
+      : "上传一张销售表，开始第一份报告；也可以先体验合成样例。";
+    $("#recent-section").hidden = !tasks.length || state.step !== 1;
     const el = $("#history");
     el.innerHTML = "";
     if (!tasks.length) {
@@ -168,7 +174,7 @@ async function loadHistory() {
       el.appendChild(li);
     }
     renderLibrary();
-    $("#recent-tasks").innerHTML = tasks.length ? tasks.slice(0, 3).map((t) => `<button class="task-card" data-task="${escapeAttr(t.task_id)}"><span class="task-card-top"><span class="document-icon">${icon("file")}</span>${statusPill(t.status)}</span><strong>${escapeHtml(fileName(t.input_file))}</strong><small>${escapeHtml(taskDate(t.created_at))}</small></button>`).join("") : '<div class="list-empty">还没有生成记录<p>从上方选择数据，开始第一份周报。</p></div>';
+    $("#recent-tasks").innerHTML = tasks.length ? tasks.slice(0, 3).map((t) => `<button class="task-card" data-task="${escapeAttr(t.task_id)}"><span class="document-icon">${icon("file")}</span><span class="task-card-detail"><strong>${escapeHtml(fileName(t.input_file))}</strong><small>${escapeHtml(taskDate(t.created_at))}</small></span><span class="task-card-status">${statusPill(t.status)}${icon("arrow")}</span></button>`).join("") : '<div class="list-empty">还没有生成记录<p>从上方选择数据，开始第一份周报。</p></div>';
     bindTasks($("#recent-tasks"));
   } catch (e) {
     if (version !== state.historyVersion) return;
@@ -297,12 +303,13 @@ async function loadFiles() {
 
 fileSelect.addEventListener("change", refreshStep1);
 function refreshStep1() {
+  $("#btn-sample").disabled = state.inspectPending || state.uploadPending || state.submitting;
   btnInspect.disabled = !fileSelect.value || state.inspectPending || state.uploadPending || state.submitting;
 }
 
-fileUpload.addEventListener("change", async () => {
-  const file = fileUpload.files[0];
-  if (!file) return;
+fileUpload.addEventListener("change", () => uploadFile(fileUpload.files[0]));
+async function uploadFile(file) {
+  if (!file || state.uploadPending || state.inspectPending || state.submitting) return;
   state.uploadPending = true;
   fileUpload.disabled = true;
   fileSelect.disabled = true;
@@ -327,6 +334,12 @@ fileUpload.addEventListener("change", async () => {
     $(".upload-box").removeAttribute("aria-busy");
     refreshStep1();
   }
+}
+
+
+$("#btn-sample").addEventListener("click", async () => {
+  const csv = "日期,订单号,销售额,商品,渠道,币种\n2026-09-21,DEMO01,100,文具,线上,USD\n2026-09-22,DEMO02,200,纸张,门店,USD\n2026-09-28,DEMO03,125.50,笔,线上,USD\n2026-09-29,DEMO04,74.50,纸张,门店,USD\n2026-09-30,DEMO05,400,本册,线上,USD\n";
+  await uploadFile(new File(["\ufeff", csv], `合成销售样例-${crypto.randomUUID().slice(0, 8)}.csv`, { type: "text/csv" }));
 });
 
 btnInspect.addEventListener("click", async () => {
@@ -674,7 +687,8 @@ async function renderResult(t, version = state.requestVersion, initialTab = "ove
   const hasReport = deliverables.includes("report.md");
   const identity = basis ? summaryIdentity(basis.summary_validation) : { kind: "pending", label: "摘要身份暂未加载" };
   const scope = basis ? (basis.scope || (basis.report_week ? `${basis.report_week} ~ ${weekEnd(basis.report_week)}` : "全表数据汇总")) : "统计范围暂未加载";
-  const title = basis ? (basis.report_week ? "销售数据周报" : "销售数据汇总") : "销售数据报告";
+  const title = basis ? (basis.report_week ? `销售数据周报 · ${basis.report_week}` : "销售数据汇总 · 全表") : "销售数据报告";
+  const validCitations = citationFacts(facts);
   const alerts = [];
   if (basis?.unit_status === "pending") alerts.push("金额单位待确认。本页、报告和汇总表均保留待确认标识，请确认后再对外交付。");
   if (basis?.compare_unavailable_reason) alerts.push(basis.compare_unavailable_reason);
@@ -697,17 +711,17 @@ async function renderResult(t, version = state.requestVersion, initialTab = "ove
     html += `<div class="metric-grid">${coreIds.map((id) => {
       const fact = facts.find((item) => item.id === id);
       const value = fact?.value;
-      const formatted = typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("zh-CN", { maximumFractionDigits: 8 }) : "待确认";
+      const formatted = typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("zh-CN", { minimumFractionDigits: ["total_sales", "avg_order_value"].includes(id) ? 2 : 0, maximumFractionDigits: 8 }) : "待确认";
       const growth = facts.find((item) => item.id === "mom_growth");
-      const foot = id === "total_sales" ? (growth?.value != null ? `<span class="${growth.value < 0 ? "down" : "up"}">较上一自然周 ${growth.value > 0 ? "+" : ""}${escapeHtml(fmtFactValue(growth))}</span>` : "周环比 · 待确认 / 不适用") : id === "order_count" ? "按完整订单号去重" : id === "line_count" ? "统计范围内的明细记录" : "销售额 ÷ 订单量";
-      return `<div class="metric-card"><span class="metric-label">${escapeHtml(fact?.label || ({ total_sales: "总销售额", order_count: "订单量", avg_order_value: "客单价", line_count: "明细行数" })[id])}</span><span class="metric-value">${escapeHtml(formatted)}${value != null && fact?.unit ? `<small>${escapeHtml(fact.unit)}</small>` : ""}</span><div class="metric-foot">${foot}</div></div>`;
+      const foot = id === "total_sales" ? (growth?.value != null ? `<span class="${growth.value < 0 ? "down" : "up"}">较上一自然周 ${growth.value > 0 ? "+" : ""}${escapeHtml(fmtFactValue(growth))}</span>` : basis && !basis.report_week ? "全表汇总 · 环比不适用" : "周环比 · 待确认 / 不适用") : id === "order_count" ? "按完整订单号去重" : id === "line_count" ? "统计范围内的明细记录" : "销售额 ÷ 订单量";
+      return `<div class="metric-card"><span class="metric-label">${escapeHtml(fact?.label || ({ total_sales: "总销售额", order_count: "订单量", avg_order_value: "客单价", line_count: "明细行数" })[id])}${validCitations.has(id) ? `<button type="button" class="metric-citation" data-citation="${escapeAttr(id)}" aria-label="查看${escapeAttr(fact.label)}的依据">↗</button>` : ""}</span><span class="metric-value">${escapeHtml(formatted)}${value != null && fact?.unit ? `<small>${escapeHtml(fact.unit)}</small>` : ""}</span><div class="metric-foot">${foot}</div></div>`;
     }).join("")}</div>`;
   } else html += sectionError("关键数字");
   const conclusion = reportSection(report, "核心结论");
   const shares = facts.find((fact) => fact.id === "channel_share");
   const top5 = facts.find((fact) => fact.id === "top5");
   const amountUnit = facts.find((fact) => fact.id === "total_sales")?.unit;
-  html += `<div class="overview-grid"><section class="panel overview-card"><h2>${icon("spark")}核心结论</h2><div class="insight-content">${report ? (conclusion ? renderMarkdown(conclusion) : '<p class="muted">这份历史报告未包含独立核心结论，请查看报告正文。</p>') : sectionError("报告正文")}</div><div class="insight-note"><span>摘要保留原文引用 · 业务质量需人工核对</span><button class="text-button" data-open-tab="document">阅读完整报告${icon("arrow")}</button></div>`;
+  html += `<div class="overview-grid"><section class="panel overview-card"><h2>${icon("spark")}核心结论</h2><div class="insight-content">${report ? (conclusion ? renderMarkdown(conclusion, facts) : '<p class="muted">这份历史报告未包含独立核心结论，请查看报告正文。</p>') : sectionError("报告正文")}</div><div class="insight-note"><span>摘要来自保存原文 · 数字可回查</span><button class="text-button" data-open-tab="document">阅读完整报告${icon("arrow")}</button></div>`;
   if (changes.length) html += `<div class="change-list"><h3>销售额变化 · 已有数据依据</h3>${changes.map((change) => `<p>${escapeHtml(formatChangeFact(change, amountUnit))}</p>`).join("")}</div>`;
   html += '</section><section class="panel overview-card"><h2>' + icon("chart") + '渠道表现</h2>';
   if (shares?.value && typeof shares.value === "object" && !Array.isArray(shares.value)) {
@@ -717,12 +731,19 @@ async function renderResult(t, version = state.requestVersion, initialTab = "ove
   html += '<h3 class="mini-section-title">Top5 商品 · 按销售额排序</h3>';
   html += Array.isArray(top5?.value) ? `<div class="rank-list">${top5.value.map((name, index) => `<span class="rank-item"><b>${String(index + 1).padStart(2, "0")}</b>${escapeHtml(name)}</span>`).join("")}</div>` : '<p class="hint">商品排名待确认或不适用。</p>';
   html += '</section></div></section>';
-  html += `<section id="panel-document" role="tabpanel" aria-labelledby="tab-document" tabindex="0" hidden><div class="panel report-document"><div class="document-label">WORKMATE · SALES REPORT</div><article class="report">${report ? renderMarkdown(report) : sectionError("报告正文")}</article></div></section>`;
+  html += `<section id="panel-document" role="tabpanel" aria-labelledby="tab-document" tabindex="0" hidden><div class="panel report-document"><div class="document-label">WORKMATE · SALES REPORT</div><article class="report">${report ? renderReportDocument(report, facts) : sectionError("报告正文")}</article></div></section>`;
   const charts = deliverables.filter((name) => name.startsWith("charts/"));
   const chartLabels = { "charts/trend.png": "每日销售趋势", "charts/top5.png": "Top5 商品销售额", "charts/channel.png": "渠道销售占比" };
-  html += `<section id="panel-charts" role="tabpanel" aria-labelledby="tab-charts" tabindex="0" hidden><div class="chart-grid">${charts.length ? charts.map((name) => `<div class="chart-item"><div class="chart-header"><h2>${escapeHtml(chartLabels[name] || "销售数据图表")}</h2><a href="${fileUrl(name)}" download>下载图片</a></div><img src="${fileUrl(name)}" alt="${escapeAttr(chartLabels[name] || name)}" data-name="${escapeAttr(name)}" loading="lazy" /></div>`).join("") : '<div class="list-empty">本次任务没有可展示的图表<p>请查看报告正文及数据依据中的限制说明。</p></div>'}</div></section>`;
-  html += `<section id="panel-basis" role="tabpanel" aria-labelledby="tab-basis" tabindex="0" hidden><div class="basis-heading"><h2>本次报告的计算口径</h2><span class="meta-pill ${basis?.verify?.passed ? "verified" : "pending"}">${basis?.verify?.passed ? "数字核对通过" : "核对状态待确认"}</span></div>${basis ? renderSummary(basis) : sectionError("计算口径")}<div class="basis-heading"><h2>事实与计算依据</h2><span class="hint">来源、公式与核对状态</span></div>${factsResponse.status === "fulfilled" ? `<div class="facts">${facts.map((fact) => `<div class="fact"><b>${escapeHtml(fact.label)}</b><span class="fact-val">${escapeHtml(fmtFactValue(fact))}</span><span class="fact-src">来源 ${escapeHtml(fact.source_col || "—")} · ${escapeHtml(fact.formula || "")}${fact.verified ? " · 已核对" : " · 待核对"}</span></div>`).join("")}</div>` : sectionError("事实依据")}<div class="basis-downloads">${deliverables.includes("analysis_basis.json") ? `<a class="download" href="${fileUrl("analysis_basis.json")}" download>下载完整依据文件</a>` : ""}${hasXlsx ? `<a class="download" href="${fileUrl("data_summary.xlsx")}" download>下载汇总表</a>` : ""}</div></section>`;
+  html += `<section id="panel-charts" role="tabpanel" aria-labelledby="tab-charts" tabindex="0" hidden><div class="chart-grid">${charts.length ? charts.map((name) => `<div class="chart-item"><div class="chart-header"><h2>${escapeHtml(chartLabels[name] || "销售数据图表")}</h2><div><button class="text-button" data-zoom-chart="${escapeAttr(name)}" disabled>放大查看</button><a href="${fileUrl(name)}" download="${escapeAttr(name.split("/").pop())}">下载图片</a></div></div><p class="chart-loading" role="status">正在加载图表…</p><img src="${fileUrl(name)}" alt="${escapeAttr(chartLabels[name] || name)}" data-name="${escapeAttr(name)}" loading="lazy" /><p class="chart-context">${escapeHtml(scope)} · 金额单位 ${escapeHtml(basis?.unit || "单位待确认")} · 原任务保存图表</p></div>`).join("") : '<div class="list-empty">本次任务没有可展示的图表<p>请查看报告正文及数据依据中的限制说明。</p></div>'}</div></section>`;
+  html += `<section id="panel-basis" role="tabpanel" aria-labelledby="tab-basis" tabindex="0" hidden><div class="basis-heading"><h2>本次报告的计算口径</h2><span class="meta-pill ${basis?.verify?.passed ? "verified" : "pending"}">${basis?.verify?.passed ? "数字核对通过" : "核对状态待确认"}</span></div>${basis ? renderSummary(basis) : sectionError("计算口径")}<div class="basis-heading"><h2>事实与计算依据</h2><span class="hint">来源、公式与核对状态</span></div>${factsResponse.status === "fulfilled" ? `<div class="facts">${facts.map((fact) => `<div class="fact" ${validCitations.has(fact.id) ? `id="fact-${escapeAttr(fact.id)}" tabindex="-1"` : ""}><b>${escapeHtml(fact.label)}</b><span class="fact-val">${escapeHtml(fmtFactValue(fact))}</span><dl class="fact-meta"><dt>范围</dt><dd>${escapeHtml(fact.range || "未记录")}</dd><dt>字段</dt><dd>${escapeHtml(fact.source_col || "由统计结果计算")}</dd><dt>公式</dt><dd>${escapeHtml(fact.formula || "未记录")}</dd><dt>核对</dt><dd>${fact.verified ? "数字已核对" : "待核对"} · 排除 ${escapeHtml(fact.excluded ?? "未记录")} 行</dd></dl></div>`).join("")}</div>` : sectionError("事实依据")}<div class="basis-downloads">${deliverables.includes("analysis_basis.json") ? `<a class="download" href="${fileUrl("analysis_basis.json")}" download>下载完整依据文件</a>` : ""}${hasXlsx ? `<a class="download" href="${fileUrl("data_summary.xlsx")}" download>下载汇总表</a>` : ""}</div></section>`;
   resultEl.innerHTML = html;
+  const overview = $("#panel-overview"), conclusionCard = overview.querySelector(".overview-card");
+  if (conclusionCard) {
+    conclusionCard.classList.add("conclusion-card");
+    overview.insertBefore(conclusionCard, overview.firstChild);
+    const changesCard = conclusionCard.querySelector(".change-list");
+    if (changesCard) overview.querySelector(".overview-grid .overview-card")?.appendChild(changesCard);
+  }
   if (state.view === "report") {
     const heading = resultEl.querySelector("h1");
     if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
@@ -746,14 +767,41 @@ async function renderResult(t, version = state.requestVersion, initialTab = "ove
     $(".report-tabs").scrollIntoView({ block: "start" });
     $(`#panel-${button.dataset.openTab}`).focus({ preventScroll: true });
   }));
+  resultEl.querySelectorAll("[data-citation]").forEach((button) => button.addEventListener("click", () => {
+    if (state.currentTaskId !== t.task_id) return;
+    selectTab("basis");
+    resultEl.querySelectorAll(".fact.cited").forEach((item) => item.classList.remove("cited"));
+    const target = document.getElementById(`fact-${button.dataset.citation}`);
+    if (target) { target.classList.add("cited"); target.scrollIntoView({ block: "center" }); target.focus({ preventScroll: true }); }
+  }));
+  resultEl.querySelectorAll("[data-zoom-chart]").forEach((button) => button.addEventListener("click", () => {
+    if (state.currentTaskId !== t.task_id) return;
+    const name = button.dataset.zoomChart;
+    const dialog = $("#chart-dialog"), img = $("#chart-dialog-image");
+    $("#chart-dialog-title").textContent = chartLabels[name] || "销售图表";
+    $("#chart-dialog-status").textContent = "正在读取原图…"; img.hidden = true;
+    img.onload = () => { $("#chart-dialog-status").textContent = `${scope} · 金额单位 ${basis?.unit || "单位待确认"} · 可滚动查看细节`; img.hidden = false; };
+    img.onerror = () => { $("#chart-dialog-status").textContent = "原图暂时无法加载。请关闭后重新读取成果，或下载原图。"; };
+    img.alt = chartLabels[name] || "销售图表"; img.src = fileUrl(name);
+    $("#chart-dialog-download").href = fileUrl(name);
+    $("#chart-dialog-download").download = name.split("/").pop();
+    dialog.showModal();
+  }));
   resultEl.querySelectorAll("img").forEach((img) => {
-    img.addEventListener("error", () => {
-      const holder = img.parentElement;
+    const holder = img.parentElement;
+    const zoom = holder.querySelector("[data-zoom-chart]");
+    let settled = false;
+    const loaded = () => { if (settled) return; settled = true; holder.querySelector(".chart-loading")?.remove(); zoom.disabled = false; };
+    const failed = () => {
+      if (settled) return; settled = true;
+      holder.querySelector(".chart-loading")?.remove(); zoom.disabled = true;
       img.replaceWith(Object.assign(document.createElement("p"), { className: "chart-error", textContent: "图表暂时无法加载。请点击重新加载，或使用上方下载图片。" }));
       const retry = document.createElement("button");
       retry.className = "secondary compact"; retry.textContent = "重新加载图表";
-      retry.addEventListener("click", () => viewTask(t.task_id)); holder.appendChild(retry);
-    });
+      retry.addEventListener("click", () => viewTask(t.task_id, true)); holder.appendChild(retry);
+    };
+    img.addEventListener("load", loaded); img.addEventListener("error", failed);
+    if (img.complete) { if (img.naturalWidth) loaded(); else if (img.currentSrc) failed(); }
   });
 }
 
@@ -770,7 +818,7 @@ function errorPanel(title, message, taskId, sourceFile = "") {
   return `<div class="result-error">${icon("file")}<h2>${escapeHtml(title)}</h2>${sourceFile ? `<p class="hint">${escapeHtml(sourceFile)}</p>` : ""}<p>${escapeHtml(message)}</p><div class="error-actions">${taskId ? `<button class="secondary" data-reload="${escapeAttr(taskId)}">重新查询任务</button>` : ""}<button class="primary" data-return-check data-return-file="${escapeAttr(sourceFile || "")}">返回重新检查${icon("arrow")}</button></div></div>`;
 }
 function bindResultActions() {
-  resultEl.querySelectorAll("[data-reload]").forEach((button) => button.addEventListener("click", () => viewTask(button.dataset.reload)));
+  resultEl.querySelectorAll("[data-reload]").forEach((button) => button.addEventListener("click", () => viewTask(button.dataset.reload, true)));
   resultEl.querySelectorAll("[data-return-check]").forEach((button) => button.addEventListener("click", () => {
     clearTimeout(state.pollTimer); state.requestVersion++;
     const sourceFile = button.dataset.returnFile;
@@ -785,6 +833,7 @@ function bindResultActions() {
   }));
 }
 
+$("#btn-close-chart").addEventListener("click", () => $("#chart-dialog").close());
 btnRestart.addEventListener("click", newReport);
 function newReport() {
   if (state.submitting || state.uploadPending) return;
@@ -811,7 +860,7 @@ function newReport() {
   setResultState("", "等待生成");
   navigate("home");
   showStep(1);
-  window.scrollTo(0, 0);
+  $("#compose-area").scrollIntoView({ block: "start" });
   document.querySelectorAll("#history button").forEach((button) => button.classList.remove("active"));
 }
 
@@ -820,7 +869,7 @@ function showStep(n) {
   const titles = ["开始制作周报", "确认字段与口径", "选择报告周次", "查看生成成果"];
   $("#flow-title").textContent = titles[n - 1];
   $("#flow-count").textContent = `${String(n).padStart(2, "0")} / 04`;
-  $("#recent-section").hidden = n !== 1;
+  $("#recent-section").hidden = n !== 1 || !state.tasks.length;
   $(".home-heading").hidden = n !== 1;
   $(".delivery-guide").hidden = n === 4;
   $("#compose-area").classList.toggle("focused", n !== 1);
@@ -861,23 +910,6 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) {
   return escapeHtml(s);
-}
-function renderMarkdown(md) {
-  const lines = escapeHtml(md).split("\n");
-  let html = "";
-  let list = null;
-  const closeList = () => { if (list) { html += `</${list}>`; list = null; } };
-  for (const line of lines) {
-    if (/^# /.test(line)) { closeList(); html += `<h1>${line.slice(2)}</h1>`; }
-    else if (/^## /.test(line)) { closeList(); html += `<h2>${line.slice(3)}</h2>`; }
-    else if (/^### /.test(line)) { closeList(); html += `<h3>${line.slice(4)}</h3>`; }
-    else if (/^- /.test(line)) { if (list !== "ul") { closeList(); html += "<ul>"; list = "ul"; } html += `<li>${line.slice(2)}</li>`; }
-    else if (/^\d+\. /.test(line)) { if (list !== "ol") { closeList(); html += "<ol>"; list = "ol"; } html += `<li>${line.replace(/^\d+\. /, "")}</li>`; }
-    else if (line.trim() === "") { closeList(); }
-    else { closeList(); html += `<p>${line}</p>`; }
-  }
-  closeList();
-  return html;
 }
 
 init();
