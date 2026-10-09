@@ -1,7 +1,7 @@
-import { citationFacts, renderMarkdown, renderReportDocument } from "./report-view.js?v=0.9-reading1";
-import { apiGet, apiPost, apiUpload } from "./api.js?v=0.9-reading1";
-import { formatChangeFact } from "./formatters.js?v=0.9-reading1";
-import { fileName, filterTasks, summaryIdentity, reportSection, shareWidth, taskProgress } from "./workspace.js?v=0.9-reading1";
+import { citationFacts, renderMarkdown, renderReportDocument, renderChartSummary } from "./report-view.js?v=0.9-repair1";
+import { apiGet, apiPost, apiUpload } from "./api.js?v=0.9-repair1";
+import { formatChangeFact } from "./formatters.js?v=0.9-repair1";
+import { fileName, filterTasks, summaryIdentity, reportSection, shareWidth, taskProgress } from "./workspace.js?v=0.9-repair1";
 
 const $ = (sel) => document.querySelector(sel);
 const fileSelect = $("#file-select");
@@ -35,6 +35,13 @@ const state = {
   step: 1,
   tasks: [],
   files: [],
+  historyLoaded: false,
+  historyError: false,
+  historyLoading: false,
+  filesLoaded: false,
+  filesError: false,
+  filesLoading: false,
+  fileMissing: false,
   filter: "all",
   requestVersion: 0,
   submitting: false,
@@ -141,50 +148,68 @@ async function loadDiagnostics() {
   }
 }
 
+function listNotice(kind) {
+  const label = kind === "history" ? "历史任务" : "文件列表";
+  if (!state[`${kind}Error`]) return state[`${kind}Loading`] ? `正在刷新${label}…` : "";
+  const cache = state[`${kind}Loaded`] ? "显示上次加载的数据" : kind === "files" && state.files.length ? "保留已上传文件" : "尚未加载数据";
+  return `${label}刷新失败 · ${cache}。${state[`${kind}Loading`] ? "正在重试…" : "请点击刷新重试。"}`;
+}
+
 async function loadHistory() {
   const version = ++state.historyVersion;
+  state.historyLoading = true;
   $("#btn-refresh-history").disabled = true;
+  renderHistory();
   try {
     const { tasks } = await apiGet("/api/v1/tasks");
     if (version !== state.historyVersion) return;
     state.tasks = tasks;
-    $("#view-home").classList.toggle("has-history", tasks.length > 0);
-    $("#home-description").textContent = tasks.length
-      ? "接着上次的工作，或开始一份新的销售报告。"
-      : "上传一张销售表，开始第一份报告；也可以先体验合成样例。";
-    $("#recent-section").hidden = !tasks.length || state.step !== 1;
-    const el = $("#history");
-    el.innerHTML = "";
-    if (!tasks.length) {
-      el.innerHTML = '<li class="empty-history">还没有生成记录</li>';
-    }
-    for (const t of tasks.slice(0, 8)) {
-      const li = document.createElement("li");
-      li.dataset.taskId = t.task_id;
-      const button = document.createElement("button");
-      button.type = "button";
-      const name = fileName(t.input_file);
-      const created = new Date(t.created_at);
-      const dateLabel = Number.isNaN(created.getTime()) ? "" : created.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
-      button.innerHTML = `<span class="history-name">${escapeHtml(name)}</span><span class="history-top"><span class="tag ${safeStatus(t.status)}">${statusText(t.status)}</span><small>${escapeHtml(dateLabel)}</small></span>`;
-      button.setAttribute("aria-label", `${statusText(t.status)}：${name}${dateLabel ? "，" + dateLabel : ""}`);
-      button.classList.toggle("active", t.task_id === state.currentTaskId);
-      button.addEventListener("click", () => viewTask(t.task_id));
-      li.appendChild(button);
-      el.appendChild(li);
-    }
-    renderLibrary();
-    $("#recent-tasks").innerHTML = tasks.length ? tasks.slice(0, 3).map((t) => `<button class="task-card" data-task="${escapeAttr(t.task_id)}"><span class="document-icon">${icon("file")}</span><span class="task-card-detail"><strong>${escapeHtml(fileName(t.input_file))}</strong><small>${escapeHtml(taskDate(t.created_at))}</small></span><span class="task-card-status">${statusPill(t.status)}${icon("arrow")}</span></button>`).join("") : '<div class="list-empty">还没有生成记录<p>从上方选择数据，开始第一份周报。</p></div>';
-    bindTasks($("#recent-tasks"));
+    state.historyLoaded = true;
+    state.historyError = false;
   } catch (e) {
     if (version !== state.historyVersion) return;
-    $("#history").innerHTML = '<li class="empty-history">历史加载失败</li>';
-    $("#recent-tasks").innerHTML = '<p class="section-load-error">最近任务加载失败，请到历史成果中刷新重试。</p>';
-    $("#library-list").innerHTML = '<p class="section-load-error">历史任务加载失败，请点击刷新重试。</p>';
-    $("#library-count").textContent = "加载失败";
+    state.historyError = true;
   } finally {
-    if (version === state.historyVersion) $("#btn-refresh-history").disabled = false;
+    if (version === state.historyVersion) {
+      state.historyLoading = false;
+      $("#btn-refresh-history").disabled = false;
+      renderHistory();
+    }
   }
+}
+
+function renderHistory() {
+  const tasks = state.tasks;
+  $("#view-home").classList.toggle("has-history", tasks.length > 0);
+  $("#home-description").textContent = tasks.length
+    ? "接着上次的工作，或开始一份新的销售报告。"
+    : "上传一张销售表，开始第一份报告；也可以先体验合成样例。";
+  $("#recent-section").hidden = (!tasks.length && !state.historyError) || state.step !== 1;
+  const el = $("#history");
+  el.innerHTML = "";
+  if (!tasks.length) {
+    el.innerHTML = state.historyLoaded ? '<li class="empty-history">还没有生成记录</li>' : '';
+  }
+  for (const t of tasks.slice(0, 8)) {
+    const li = document.createElement("li");
+    li.dataset.taskId = t.task_id;
+    const button = document.createElement("button");
+    button.type = "button";
+    const name = fileName(t.input_file);
+    const created = new Date(t.created_at);
+    const dateLabel = Number.isNaN(created.getTime()) ? "" : created.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+    button.innerHTML = `<span class="history-name">${escapeHtml(name)}</span><span class="history-top"><span class="tag ${safeStatus(t.status)}">${statusText(t.status)}</span><small>${escapeHtml(dateLabel)}</small></span>`;
+    button.setAttribute("aria-label", `${statusText(t.status)}：${name}${dateLabel ? "，" + dateLabel : ""}`);
+    button.classList.toggle("active", t.task_id === state.currentTaskId);
+    button.addEventListener("click", () => viewTask(t.task_id));
+    li.appendChild(button);
+    el.appendChild(li);
+  }
+  if (state.historyError) el.insertAdjacentHTML("afterbegin", `<li class="empty-history list-status" role="status">${listNotice("history")}</li>`);
+  renderLibrary();
+  $("#recent-tasks").innerHTML = tasks.length ? tasks.slice(0, 3).map((t) => `<button class="task-card" data-task="${escapeAttr(t.task_id)}"><span class="document-icon">${icon("file")}</span><span class="task-card-detail"><strong>${escapeHtml(fileName(t.input_file))}</strong><small>${escapeHtml(taskDate(t.created_at))}</small></span><span class="task-card-status">${statusPill(t.status)}${icon("arrow")}</span></button>`).join("") : state.historyLoaded ? '<div class="list-empty">还没有生成记录<p>从上方选择数据，开始第一份周报。</p></div>' : '';
+  if (state.historyError) $("#recent-tasks").insertAdjacentHTML("afterbegin", `<p class="list-status" role="status">${listNotice("history")}</p>`);
+  bindTasks($("#recent-tasks"));
 }
 
 function icon(name) { return `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`; }
@@ -194,8 +219,10 @@ function taskDate(value) { const date = new Date(value); return Number.isNaN(dat
 function bindTasks(el) { el.querySelectorAll("[data-task]").forEach((b) => b.addEventListener("click", () => viewTask(b.dataset.task))); }
 function renderLibrary() {
   const tasks = filterTasks(state.tasks, $("#history-search").value, state.filter);
-  $("#library-count").textContent = `共 ${state.tasks.length} 个任务 · 当前显示 ${tasks.length} 个`;
-  $("#library-list").innerHTML = tasks.length ? tasks.map((t) => `<button class="library-row" data-task="${escapeAttr(t.task_id)}"><span class="document-icon">${icon("file")}</span><div><strong>${escapeHtml(fileName(t.input_file))}</strong><small>${escapeHtml(taskDate(t.created_at))} · ${t.status === "done" ? "报告与数据成果" : "任务记录"}</small></div>${statusPill(t.status)}${icon("arrow")}</button>`).join("") : '<div class="list-empty">没有匹配的任务<p>调整文件名或状态筛选后再试。</p></div>';
+  $("#library-count").textContent = `${state.historyLoaded ? `共 ${state.tasks.length} 个任务 · 当前显示 ${tasks.length} 个` : "任务数量尚未加载"}${state.historyError ? " · 列表未刷新" : ""}`;
+  $("#library-list").innerHTML = tasks.length ? tasks.map((t) => `<button class="library-row" data-task="${escapeAttr(t.task_id)}"><span class="document-icon">${icon("file")}</span><div><strong>${escapeHtml(fileName(t.input_file))}</strong><small>${escapeHtml(taskDate(t.created_at))} · ${t.status === "done" ? "报告与数据成果" : "任务记录"}</small></div>${statusPill(t.status)}${icon("arrow")}</button>`).join("") : state.historyLoaded ? '<div class="list-empty">没有匹配的任务<p>调整文件名或状态筛选后再试。</p></div>' : '';
+  const notice = listNotice("history");
+  if (notice) $("#library-list").insertAdjacentHTML("afterbegin", `<p class="list-status" role="status">${notice}</p>`);
   bindTasks($("#library-list"));
 }
 
@@ -265,43 +292,65 @@ function statusText(s) {
 
 async function loadFiles() {
   const version = ++state.filesVersion;
-  const selected = fileSelect.value;
+  state.filesLoading = true;
   $("#btn-refresh-files").disabled = true;
+  renderFiles();
   try {
     const { files } = await apiGet("/api/v1/data-files");
     if (version !== state.filesVersion) return;
+    // Read at response time: a choice made while refreshing must survive.
+    const selected = fileSelect.value;
     state.files = files;
-    fileSelect.innerHTML = "";
-    if (!files.length) {
-      fileSelect.innerHTML = '<option value="">暂无文件，请上传</option>';
-    } else {
-      for (const f of files) {
-        const opt = document.createElement("option");
-        opt.value = f.name;
-        opt.textContent = `${f.name}（${fmtSize(f.size)}）`;
-        fileSelect.appendChild(opt);
-      }
-    }
-    if (files.some((file) => file.name === selected)) fileSelect.value = selected;
-    $("#file-count").textContent = String(files.length);
-    $("#files-description").textContent = `${files.length} 份数据文件 · CSV / Excel`;
-    $("#files-list").innerHTML = files.length ? files.map((file) => `<button class="file-row" data-file="${escapeAttr(file.name)}"><span class="document-icon">${icon("folder")}</span><div><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(fmtSize(file.size))} · ${file.name.toLowerCase().endsWith(".xlsx") ? "Excel 表格" : "CSV 表格"} · 点击检查数据</small></div>${icon("arrow")}</button>`).join("") : '<div class="list-empty">这里还没有数据文件<p>点击右上角上传，添加第一份销售表。</p></div>';
-    $("#files-list").querySelectorAll("[data-file]").forEach((button) => button.addEventListener("click", () => {
-      if (state.submitting || state.uploadPending) return;
-      newReport(); fileSelect.value = button.dataset.file; refreshStep1(); btnInspect.click();
-    }));
+    state.filesLoaded = true;
+    state.filesError = false;
+    if (selected && !files.some((file) => file.name === selected)) state.fileMissing = true;
+    renderFileOptions(selected);
   } catch (e) {
     if (version !== state.filesVersion) return;
-    fileSelect.innerHTML = '<option value="">加载失败</option>';
-    $("#files-description").textContent = "文件加载失败";
-    $("#files-list").innerHTML = '<p class="section-load-error">数据文件加载失败，请点击刷新列表重试。</p>';
+    state.filesError = true;
+    if (!state.filesLoaded && !state.files.length) renderFileOptions();
   } finally {
-    if (version === state.filesVersion) $("#btn-refresh-files").disabled = false;
+    if (version === state.filesVersion) {
+      state.filesLoading = false;
+      $("#btn-refresh-files").disabled = false;
+      renderFiles();
+      refreshStep1();
+    }
   }
-  refreshStep1();
 }
 
-fileSelect.addEventListener("change", refreshStep1);
+function renderFileOptions(selected = fileSelect.value) {
+  fileSelect.replaceChildren();
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = state.files.length ? "请选择数据文件" : state.filesLoaded ? "暂无文件，请上传" : "文件尚未加载，请刷新或上传";
+  fileSelect.appendChild(placeholder);
+  for (const file of state.files) {
+    const option = document.createElement("option");
+    option.value = file.name;
+    option.textContent = `${file.name}（${fmtSize(file.size)}）`;
+    fileSelect.appendChild(option);
+  }
+  fileSelect.value = state.files.some((file) => file.name === selected) ? selected : "";
+}
+
+function renderFiles() {
+  const files = state.files;
+  $("#btn-retry-files").disabled = state.filesLoading;
+  const notice = listNotice("files");
+  $("#file-list-status").textContent = [notice, state.fileMissing ? "原文件选择已失效，请重新选择。" : ""].filter(Boolean).join(" ");
+  $("#file-list-status").hidden = !$("#file-list-status").textContent;
+  $("#file-count").textContent = state.filesLoaded || files.length ? `${files.length}${state.filesError ? "*" : ""}` : "";
+  $("#files-description").textContent = `${state.filesLoaded || files.length ? `${files.length} 份数据文件 · CSV / Excel` : "文件数量尚未加载"}${state.filesError ? " · 列表未刷新" : ""}`;
+  $("#files-list").innerHTML = (notice ? `<p class="list-status" role="status">${notice}</p>` : "") + (files.length ? files.map((file) => `<button class="file-row" data-file="${escapeAttr(file.name)}"><span class="document-icon">${icon("folder")}</span><div><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(fmtSize(file.size))} · ${file.name.toLowerCase().endsWith(".xlsx") ? "Excel 表格" : "CSV 表格"} · 点击检查数据</small></div>${icon("arrow")}</button>`).join("") : state.filesLoaded ? '<div class="list-empty">这里还没有数据文件<p>点击右上角上传，添加第一份销售表。</p></div>' : "");
+  $("#files-list").querySelectorAll("[data-file]").forEach((button) => button.addEventListener("click", () => {
+    if (state.submitting || state.uploadPending) return;
+    newReport(); fileSelect.value = button.dataset.file; state.fileMissing = false; renderFiles(); refreshStep1(); btnInspect.click();
+  }));
+}
+
+fileSelect.addEventListener("change", () => { state.fileMissing = false; renderFiles(); refreshStep1(); });
+$("#btn-retry-files").addEventListener("click", loadFiles);
 function refreshStep1() {
   $("#btn-sample").disabled = state.inspectPending || state.uploadPending || state.submitting;
   btnInspect.disabled = !fileSelect.value || state.inspectPending || state.uploadPending || state.submitting;
@@ -318,11 +367,14 @@ async function uploadFile(file) {
   const selected = fileSelect.value;
   uploadMsg.textContent = "上传中…";
   try {
-    await apiUpload("/api/v1/upload", file);
+    const uploaded = await apiUpload("/api/v1/upload", file);
+    const confirmed = { name: uploaded.name, size: uploaded.size };
+    state.files = [...state.files.filter((item) => item.name !== confirmed.name), confirmed];
+    state.fileMissing = false;
+    renderFileOptions(confirmed.name);
     uploadMsg.textContent = `已上传 ${file.name}`;
     fileUpload.value = "";
     await loadFiles();
-    fileSelect.value = file.name;
     refreshStep1();
   } catch (e) {
     uploadMsg.textContent = e.message;
@@ -714,7 +766,7 @@ async function renderResult(t, version = state.requestVersion, initialTab = "ove
       const formatted = typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("zh-CN", { minimumFractionDigits: ["total_sales", "avg_order_value"].includes(id) ? 2 : 0, maximumFractionDigits: 8 }) : "待确认";
       const growth = facts.find((item) => item.id === "mom_growth");
       const foot = id === "total_sales" ? (growth?.value != null ? `<span class="${growth.value < 0 ? "down" : "up"}">较上一自然周 ${growth.value > 0 ? "+" : ""}${escapeHtml(fmtFactValue(growth))}</span>` : basis && !basis.report_week ? "全表汇总 · 环比不适用" : "周环比 · 待确认 / 不适用") : id === "order_count" ? "按完整订单号去重" : id === "line_count" ? "统计范围内的明细记录" : "销售额 ÷ 订单量";
-      return `<div class="metric-card"><span class="metric-label">${escapeHtml(fact?.label || ({ total_sales: "总销售额", order_count: "订单量", avg_order_value: "客单价", line_count: "明细行数" })[id])}${validCitations.has(id) ? `<button type="button" class="metric-citation" data-citation="${escapeAttr(id)}" aria-label="查看${escapeAttr(fact.label)}的依据">↗</button>` : ""}</span><span class="metric-value">${escapeHtml(formatted)}${value != null && fact?.unit ? `<small>${escapeHtml(fact.unit)}</small>` : ""}</span><div class="metric-foot">${foot}</div></div>`;
+      return `<div class="metric-card"><span class="metric-label">${escapeHtml(fact?.label || ({ total_sales: "总销售额", order_count: "订单量", avg_order_value: "客单价", line_count: "明细行数" })[id])}${validCitations.has(id) ? `<button type="button" class="metric-citation" data-citation="${escapeAttr(id)}" aria-label="查看${escapeAttr(fact.label)}的依据">↗</button>` : ""}</span><span class="metric-value"><span class="metric-number">${escapeHtml(formatted)}</span>${value != null && fact?.unit ? `<small>${escapeHtml(fact.unit)}</small>` : ""}<span class="metric-scroll-hint">可左右滚动查看完整数值</span></span><div class="metric-foot">${foot}</div></div>`;
     }).join("")}</div>`;
   } else html += sectionError("关键数字");
   const conclusion = reportSection(report, "核心结论");
@@ -734,7 +786,7 @@ async function renderResult(t, version = state.requestVersion, initialTab = "ove
   html += `<section id="panel-document" role="tabpanel" aria-labelledby="tab-document" tabindex="0" hidden><div class="panel report-document"><div class="document-label">WORKMATE · SALES REPORT</div><article class="report">${report ? renderReportDocument(report, facts) : sectionError("报告正文")}</article></div></section>`;
   const charts = deliverables.filter((name) => name.startsWith("charts/"));
   const chartLabels = { "charts/trend.png": "每日销售趋势", "charts/top5.png": "Top5 商品销售额", "charts/channel.png": "渠道销售占比" };
-  html += `<section id="panel-charts" role="tabpanel" aria-labelledby="tab-charts" tabindex="0" hidden><div class="chart-grid">${charts.length ? charts.map((name) => `<div class="chart-item"><div class="chart-header"><h2>${escapeHtml(chartLabels[name] || "销售数据图表")}</h2><div><button class="text-button" data-zoom-chart="${escapeAttr(name)}" disabled>放大查看</button><a href="${fileUrl(name)}" download="${escapeAttr(name.split("/").pop())}">下载图片</a></div></div><p class="chart-loading" role="status">正在加载图表…</p><img src="${fileUrl(name)}" alt="${escapeAttr(chartLabels[name] || name)}" data-name="${escapeAttr(name)}" loading="lazy" /><p class="chart-context">${escapeHtml(scope)} · 金额单位 ${escapeHtml(basis?.unit || "单位待确认")} · 原任务保存图表</p></div>`).join("") : '<div class="list-empty">本次任务没有可展示的图表<p>请查看报告正文及数据依据中的限制说明。</p></div>'}</div></section>`;
+  html += `<section id="panel-charts" role="tabpanel" aria-labelledby="tab-charts" tabindex="0" hidden><div class="chart-grid">${charts.length ? charts.map((name) => `<div class="chart-item"><div class="chart-header"><h2>${escapeHtml(chartLabels[name] || "销售数据图表")}</h2><div><button class="text-button" data-zoom-chart="${escapeAttr(name)}" disabled>放大查看</button><a href="${fileUrl(name)}" download="${escapeAttr(name.split("/").pop())}">下载图片</a></div></div><div class="chart-summary">${renderChartSummary(name, facts, scope)}</div><p class="chart-loading" role="status">正在加载图表…</p><img src="${fileUrl(name)}" alt="${escapeAttr(chartLabels[name] || name)}" data-name="${escapeAttr(name)}" loading="lazy" /><p class="chart-context">${escapeHtml(scope)} · 金额单位 ${escapeHtml(basis?.unit || "单位待确认")} · 原任务保存图表</p></div>`).join("") : '<div class="list-empty">本次任务没有可展示的图表<p>请查看报告正文及数据依据中的限制说明。</p></div>'}</div></section>`;
   html += `<section id="panel-basis" role="tabpanel" aria-labelledby="tab-basis" tabindex="0" hidden><div class="basis-heading"><h2>本次报告的计算口径</h2><span class="meta-pill ${basis?.verify?.passed ? "verified" : "pending"}">${basis?.verify?.passed ? "数字核对通过" : "核对状态待确认"}</span></div>${basis ? renderSummary(basis) : sectionError("计算口径")}<div class="basis-heading"><h2>事实与计算依据</h2><span class="hint">来源、公式与核对状态</span></div>${factsResponse.status === "fulfilled" ? `<div class="facts">${facts.map((fact) => `<div class="fact" ${validCitations.has(fact.id) ? `id="fact-${escapeAttr(fact.id)}" tabindex="-1"` : ""}><b>${escapeHtml(fact.label)}</b><span class="fact-val">${escapeHtml(fmtFactValue(fact))}</span><dl class="fact-meta"><dt>范围</dt><dd>${escapeHtml(fact.range || "未记录")}</dd><dt>字段</dt><dd>${escapeHtml(fact.source_col || "由统计结果计算")}</dd><dt>公式</dt><dd>${escapeHtml(fact.formula || "未记录")}</dd><dt>核对</dt><dd>${fact.verified ? "数字已核对" : "待核对"} · 排除 ${escapeHtml(fact.excluded ?? "未记录")} 行</dd></dl></div>`).join("")}</div>` : sectionError("事实依据")}<div class="basis-downloads">${deliverables.includes("analysis_basis.json") ? `<a class="download" href="${fileUrl("analysis_basis.json")}" download>下载完整依据文件</a>` : ""}${hasXlsx ? `<a class="download" href="${fileUrl("data_summary.xlsx")}" download>下载汇总表</a>` : ""}</div></section>`;
   resultEl.innerHTML = html;
   const overview = $("#panel-overview"), conclusionCard = overview.querySelector(".overview-card");
@@ -813,7 +865,25 @@ function selectTab(tab, writeUrl = true) {
   });
   resultEl.querySelectorAll("[role=tabpanel]").forEach((panel) => (panel.hidden = panel.id !== `panel-${tab}`));
   if (writeUrl && state.view === "report") updateUrl(tab);
+  updateMetricOverflow();
 }
+function updateMetricOverflow() {
+  resultEl.querySelectorAll(".metric-number").forEach((number) => {
+    if (!number.clientWidth) return;
+    const overflow = number.scrollWidth > number.clientWidth + 1;
+    if (overflow) {
+      number.tabIndex = 0;
+      number.setAttribute("role", "region");
+      number.setAttribute("aria-label", "完整数值，可左右滚动查看");
+    } else {
+      number.removeAttribute("tabindex");
+      number.removeAttribute("role");
+      number.removeAttribute("aria-label");
+    }
+  });
+}
+window.addEventListener("resize", updateMetricOverflow);
+
 function errorPanel(title, message, taskId, sourceFile = "") {
   return `<div class="result-error">${icon("file")}<h2>${escapeHtml(title)}</h2>${sourceFile ? `<p class="hint">${escapeHtml(sourceFile)}</p>` : ""}<p>${escapeHtml(message)}</p><div class="error-actions">${taskId ? `<button class="secondary" data-reload="${escapeAttr(taskId)}">重新查询任务</button>` : ""}<button class="primary" data-return-check data-return-file="${escapeAttr(sourceFile || "")}">返回重新检查${icon("arrow")}</button></div></div>`;
 }
@@ -869,7 +939,7 @@ function showStep(n) {
   const titles = ["开始制作周报", "确认字段与口径", "选择报告周次", "查看生成成果"];
   $("#flow-title").textContent = titles[n - 1];
   $("#flow-count").textContent = `${String(n).padStart(2, "0")} / 04`;
-  $("#recent-section").hidden = n !== 1 || !state.tasks.length;
+  $("#recent-section").hidden = n !== 1 || (!state.tasks.length && !state.historyError);
   $(".home-heading").hidden = n !== 1;
   $(".delivery-guide").hidden = n === 4;
   $("#compose-area").classList.toggle("focused", n !== 1);

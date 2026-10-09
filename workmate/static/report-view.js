@@ -20,6 +20,43 @@ export function citationFacts(facts) {
   return labels;
 }
 
+/** Readable chart context from saved facts only; never infer points from a PNG.
+ * @param {string} name @param {unknown} facts @param {string} [scope] */
+export function renderChartSummary(name, facts, scope = "") {
+  /** @type {Record<string, string>} */
+  const factIds = { "charts/trend.png": "total_sales", "charts/top5.png": "top5", "charts/channel.png": "channel_share" };
+  const id = factIds[name];
+  if (!id) return '<p>此图表的摘要待确认，请放大查看原图并核对数据依据。</p>';
+  const labels = citationFacts(facts);
+  const fact = labels.has(id) && Array.isArray(facts) ? facts.find((item) => item?.id === id) : null;
+  const value = fact?.value;
+  const source = fact ? `<button type="button" class="citation-link" data-citation="${id}" aria-label="查看依据：${escapeText(labels.get(id))}">查看依据</button>` : "";
+  const range = scope.trim() ? scope : typeof fact?.range === "string" && fact.range.trim() ? fact.range : "范围待确认";
+  /** @param {number} number @param {boolean} [money] */
+  const numberText = (number, money = false) => number.toLocaleString("zh-CN", { minimumFractionDigits: money ? 2 : 0, maximumFractionDigits: 8 });
+  let body;
+  if (id === "total_sales") {
+    const unit = typeof fact?.unit === "string" && fact.unit.trim() ? fact.unit : "单位待确认";
+    body = typeof value === "number" && Number.isFinite(value)
+      ? `<p>总销售额 <strong>${escapeText(numberText(value, true))} ${escapeText(unit)}</strong></p>`
+      : '<p>总销售额待确认。</p>';
+    body += '<p>逐日数值可放大查看原图。</p>';
+  } else if (id === "top5") {
+    body = Array.isArray(value) && value.length && value.every((item) => typeof item === "string" && item.trim())
+      ? `<p>按销售额排名</p><ol>${value.map((item) => `<li>${escapeText(item)}</li>`).join("")}</ol><p>各商品的销售金额可放大查看原图。</p>`
+      : '<p>商品排名待确认或不适用，请查看数据依据。</p>';
+  } else {
+    const entries = value && typeof value === "object" && !Array.isArray(value) ? Object.entries(value) : [];
+    body = entries.length
+      ? `<ul>${entries.map(([channel, share]) => `<li>${escapeText(channel)} · <strong>${typeof share === "number" && Number.isFinite(share) ? `${escapeText(numberText(share))}%` : "占比待确认"}</strong></li>`).join("")}</ul>`
+      : '<p>渠道占比待确认或不适用，请查看数据依据。</p>';
+    if (entries.some(([, share]) => typeof share === "number" && Number.isFinite(share) && (share < 0 || share > 100))) {
+      body += '<p>占比含负值或超过 100%，请结合原始数据与计算口径核对。</p>';
+    }
+  }
+  return `${body}<p>统计范围：${escapeText(range)}</p><p>来源：本次任务事实。${source}</p>`;
+}
+
 /** @param {string} text @param {Map<string,string>} labels */
 function inline(text, labels) {
   let result = "", cursor = 0;

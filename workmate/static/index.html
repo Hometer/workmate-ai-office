@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#f7f8fa" />
   <title>WorkMate · 办公工作台</title>
-  <link rel="stylesheet" href="styles.css?v=0.9-reading1" />
+  <link rel="stylesheet" href="styles.css?v=0.9-repair1" />
 </head>
 <body>
   <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -47,7 +47,7 @@
           <div id="compose-area" class="compose-area">
             <ol class="steps" aria-label="制作进度"><li class="step active" data-step="1"><span class="step-number">1</span>选择数据</li><li class="step" data-step="2"><span class="step-number">2</span>确认口径</li><li class="step" data-step="3" id="step-week"><span class="step-number">3</span>选择周次</li><li class="step" data-step="4"><span class="step-number">4</span>查看成果</li></ol>
             <div class="compose-grid"><section class="panel flow-panel" aria-labelledby="flow-title"><div class="panel-heading"><div class="heading-with-icon"><span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg></span><div><span class="panel-kicker">销售分析</span><h2 id="flow-title" tabindex="-1">开始制作周报</h2></div></div><span id="flow-count" class="panel-count">01 / 04</span></div>
-              <div id="step-1" class="step-body"><p class="section-intro">上传销售表，或选择已有文件。原表始终保持只读。</p><div class="upload-box"><span class="upload-icon"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg></span><strong>点击上传销售数据</strong><span>Excel / CSV · 单文件不超过 20 MB</span><input type="file" id="file-upload" accept=".xlsx,.csv" aria-label="上传 xlsx 或 csv 数据表" /></div><p id="upload-msg" class="hint" role="status" aria-live="polite"></p><div class="field file-field"><label for="file-select">或使用已有数据</label><select id="file-select"><option value="">正在读取数据文件…</option></select></div><div class="sample-entry"><button id="btn-sample" class="text-button">体验合成销售样例</button><span>仅用于了解流程，不代表你的业务。</span></div><button id="btn-inspect" class="primary" disabled>检查数据并继续<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
+              <div id="step-1" class="step-body"><p class="section-intro">上传销售表，或选择已有文件。原表始终保持只读。</p><div class="upload-box"><span class="upload-icon"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg></span><strong>点击上传销售数据</strong><span>Excel / CSV · 单文件不超过 20 MB</span><input type="file" id="file-upload" accept=".xlsx,.csv" aria-label="上传 xlsx 或 csv 数据表" /></div><p id="upload-msg" class="hint" role="status" aria-live="polite"></p><div class="field file-field"><label for="file-select">或使用已有数据</label><select id="file-select"><option value="">正在读取数据文件…</option></select><p id="file-list-status" class="list-status" role="status" hidden></p><button id="btn-retry-files" class="text-button" type="button">刷新文件列表</button></div><div class="sample-entry"><button id="btn-sample" class="text-button">体验合成销售样例</button><span>仅用于了解流程，不代表你的业务。</span></div><button id="btn-inspect" class="primary" disabled>检查数据并继续<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
               <div id="step-2" class="step-body" hidden><p class="section-intro">核对字段和金额含义，确定数字的计算方式。</p><div id="inspect-result"></div><div class="flow-actions"><button class="secondary back-step" data-step-back="1"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>返回</button><button id="btn-week" class="primary">继续选择周次<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
               <div id="step-3" class="step-body" hidden><p class="section-intro">选择统计范围，确认业务数据是否完整。</p><div id="week-result"></div><div class="flow-actions"><button class="secondary back-step" data-step-back="2"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>返回</button><button id="btn-generate" class="primary">生成销售周报<svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg></button></div></div>
               <div id="step-4" class="step-body" hidden><div class="task-progress"><span class="task-progress-icon"></span><p id="task-status" class="status" role="status" aria-live="polite"></p></div><p id="task-hint" class="hint">生成结束后，成果会自动打开，也可从历史任务找回。</p><button id="btn-restart" class="secondary">开始制作新周报</button></div>
@@ -64,6 +64,6 @@
     </div>
   </div>
   <dialog id="chart-dialog" aria-labelledby="chart-dialog-title"><div class="chart-dialog-heading"><h2 id="chart-dialog-title">销售图表</h2><button id="btn-close-chart" class="secondary compact">关闭</button></div><p id="chart-dialog-status" role="status"></p><div class="chart-dialog-canvas" tabindex="0" role="region" aria-label="图表细节，可滚动"><img id="chart-dialog-image" alt="" hidden /></div><a id="chart-dialog-download" class="download" download>下载原图</a></dialog>
-  <script type="module" src="app.js?v=0.9-reading1"></script>
+  <script type="module" src="app.js?v=0.9-repair1"></script>
 </body>
 </html>
