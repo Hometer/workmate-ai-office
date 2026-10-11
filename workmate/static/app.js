@@ -18,6 +18,7 @@ const resultEl = $("#result");
 const emptyResult = resultEl.innerHTML;
 
 const state = {
+  demo: document.body.dataset.onlineDemo === "true",
   file: null,
   inspect: null,
   inspectPending: false,
@@ -53,8 +54,25 @@ const state = {
 showStep(1);
 
 async function init() {
+  configureDemo();
   restoreLocation();
   await Promise.all([loadFiles(), loadMode(), loadHistory(), loadDiagnostics()]);
+}
+
+function configureDemo() {
+  if (!state.demo) return;
+  $(".brand-badge").textContent = "面试演示";
+  $(".local-profile strong").textContent = "我的演示工作区";
+  $(".local-profile div > span").textContent = "记录仅在本浏览器可见";
+  $(".local-badge").lastChild.textContent = "在线演示";
+  $(".upload-box strong").textContent = "上传本站合成样表";
+  $(".upload-box > span:last-of-type").textContent = "仅接受本站 CSV 样表 · 不接收真实业务数据";
+  fileUpload.accept = ".csv";
+  $("#step-1 .section-intro").textContent = "点击下方体验合成销售样例，也可以下载本站样表后上传。";
+  $("#view-settings .page-section-heading p").textContent = "查看在线演示的运行方式和记录有效期。";
+  $("#view-settings .panel-heading h2").textContent = "演示运行状态";
+  $(".privacy-note strong").textContent = "只使用本站合成样表";
+  $(".privacy-note p").textContent = "本演示不接收真实业务数据；记录按浏览器隔离，过期或服务重建后可以重新体验，报告请及时下载。";
 }
 
 const views = { home: "工作台", files: "数据文件", library: "历史成果", settings: "环境自检", report: "销售周报" };
@@ -137,7 +155,7 @@ async function loadDiagnostics() {
   $("#environment-state").textContent = "检查中…";
   try {
     const data = await apiGet("/api/v1/diagnostics");
-    $("#environment-state").textContent = data.status === "ready" ? "本地环境可用" : "有待处理项";
+    $("#environment-state").textContent = data.status === "ready" ? (state.demo ? "在线演示可用" : "本地环境可用") : "有待处理项";
     $("#environment-checks").innerHTML = data.checks.map((check) => `<li><strong>${escapeHtml(check.message)}</strong>${check.steps.length ? `<ol>${check.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>` : ""}</li>`).join("");
     setModelNotice(data.model_mode);
   } catch (e) {
@@ -183,7 +201,7 @@ function renderHistory() {
   $("#view-home").classList.toggle("has-history", tasks.length > 0);
   $("#home-description").textContent = tasks.length
     ? "接着上次的工作，或开始一份新的销售报告。"
-    : "上传一张销售表，开始第一份报告；也可以先体验合成样例。";
+    : state.demo ? "点击体验合成销售样例，完成数据检查、口径确认与周报下载。" : "上传一张销售表，开始第一份报告；也可以先体验合成样例。";
   $("#recent-section").hidden = (!tasks.length && !state.historyError) || state.step !== 1;
   const el = $("#history");
   el.innerHTML = "";
@@ -390,6 +408,16 @@ async function uploadFile(file) {
 
 
 $("#btn-sample").addEventListener("click", async () => {
+  if (state.demo) {
+    await loadFiles();
+    const sample = state.files.find((file) => file.name === "合成销售样例.csv");
+    if (!sample) { uploadMsg.textContent = "样表暂时未就绪，请刷新文件列表后再试。"; return; }
+    fileSelect.value = sample.name;
+    state.fileMissing = false;
+    refreshStep1();
+    btnInspect.click();
+    return;
+  }
   const csv = "日期,订单号,销售额,商品,渠道,币种\n2026-09-21,DEMO01,100,文具,线上,USD\n2026-09-22,DEMO02,200,纸张,门店,USD\n2026-09-28,DEMO03,125.50,笔,线上,USD\n2026-09-29,DEMO04,74.50,纸张,门店,USD\n2026-09-30,DEMO05,400,本册,线上,USD\n";
   await uploadFile(new File(["\ufeff", csv], `合成销售样例-${crypto.randomUUID().slice(0, 8)}.csv`, { type: "text/csv" }));
 });

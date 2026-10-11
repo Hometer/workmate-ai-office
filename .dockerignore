@@ -1,0 +1,7 @@
+*
+!Dockerfile
+!requirements-render.txt
+!workmate/
+!workmate/**
+workmate/**/__pycache__/
+workmate/**/*.pyc
