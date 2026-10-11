@@ -2817,3 +2817,8 @@ h1 {
     gap:8px 16px
   }
 }
+
+/* The banner is shown only by the separate online demo entrypoint. */
+.demo-banner { padding: 16px 20px; margin-bottom: 18px; border: 1px solid #dcd5ef; border-radius: 12px; background: #f4f1fc; color: #383144; line-height: 1.65; }
+.demo-banner p { margin: 7px 0; font-size: 14px; }
+.demo-banner a { color: #5d459b; font-size: 14px; display: inline-flex; align-items: center; min-height: 44px; }

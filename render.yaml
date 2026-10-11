@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: workmate-interview-demo
+    runtime: docker
+    plan: free
+    region: singapore
+    numInstances: 1
+    healthCheckPath: /healthz
+    dockerfilePath: ./Dockerfile
+    autoDeployTrigger: "off"
+    envVars:
+      - key: WORKMATE_DEMO_SECRET
+        generateValue: true
+      - key: WORKMATE_DEMO_SECURE_COOKIE
+        value: "1"
+      - key: WORKMATE_DEMO_DIR
+        value: /tmp/workmate-demo
+      - key: MPLCONFIGDIR
+        value: /tmp/workmate-matplotlib

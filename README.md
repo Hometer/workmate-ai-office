@@ -6,7 +6,7 @@
 
 **让数据清楚，让工作轻松。**
 
-[快速开始](#快速开始) · [配置说明](docs/配置说明.md) · [文档导航](docs/README.md) · [项目状态](docs/项目状态.md)
+[在线演示](https://workmate-interview-demo.onrender.com/) · [快速开始](#快速开始) · [配置说明](docs/配置说明.md) · [文档导航](docs/README.md) · [项目状态](docs/项目状态.md)
 
 </div>
 
@@ -57,6 +57,18 @@ WORKMATE_MODEL_PROVIDER=mock .venv/bin/python -m workmate serve --port 8000
 在 `.env` 指定数据目录与成果目录。默认真实模型方案为本地 Ollama；离线演示可用 mock。安装 Ollama 后运行 `ollama pull qwen2.5:7b`，设置 `WORKMATE_MODEL_PROVIDER=ollama` 并重启服务。网页先「检查数据并继续」，确认口径再生成。
 
 详细参数、数据位置和工程检查见 [配置说明](docs/配置说明.md)。仓库不包含本机密钥、业务数据、依赖目录或运行缓存。
+
+## Render 免费面试演示
+
+已上线：[打开 WorkMate 面试演示](https://workmate-interview-demo.onrender.com/)，无需注册即可操作。[云端验收记录](docs/evidence/Render免费面试演示/云端上线验收.md)。
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Hometer/workmate-ai-office)
+
+部署按钮使用仓库的 `render.yaml`，创建一个 Free Web Service；无需数据库、付费磁盘或模型 API。登录 Render 后核对服务计划为 **Free**，再创建。部署成功后，服务的 `https://…onrender.com` 地址可直接供面试官操作。
+
+演示入口使用独立浏览器工作区与公开合成样表，支持检查、确认、生成周报、回查依据、图表和下载。摘要使用确定性 mock 模式，页面明确标注未调用真实模型；本地 Ollama 入口照常可用。演示每个工作区最多 5 份周报，最长保留两小时，服务休眠或重建也可能提前清空。
+
+免费服务闲置 15 分钟会休眠，首次唤醒约一分钟；建议面试前打开并生成一份报告，另存下载文件备用。部署步骤、演示路线及待验项见 [Render 上线方案](docs/阶段文档/Render免费面试演示-上线方案.md)。
 
 ## 当前范围
 

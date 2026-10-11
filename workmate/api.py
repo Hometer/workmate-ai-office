@@ -4,13 +4,16 @@ from __future__ import annotations
 import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+import hashlib
+import threading
 from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Literal
@@ -51,18 +54,37 @@ class TaskRequest(BaseModel):
     confirmation_id: str | None = None
 
 
-def create_app(config: Config | None = None) -> FastAPI:
-    config = config or load_config()
-    config.ensure_dirs()
-    loop = Loop(config)
-    loop.storage.recover_interrupted()
-    executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="workmate")
+def create_app(config: Config | None = None, *, demo=None) -> FastAPI:
+    from .demo import DemoBoundary, DemoContext, SAMPLE, SAMPLE_HASH, SAMPLE_NAME
+    executor = ThreadPoolExecutor(max_workers=1 if demo else 2, thread_name_prefix="workmate")
+    local = None
+    if demo is None:
+        config = config or load_config()
+        config.ensure_dirs()
+        loop = Loop(config)
+        loop.storage.recover_interrupted()
+        local = DemoContext(config, loop, threading.Lock())
 
-    app = FastAPI(title="WorkMate", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    @asynccontextmanager
+    async def lifespan(app):
+        yield
+        executor.shutdown(wait=True)
+
+    app = FastAPI(title="WorkMate", docs_url=None if demo else "/api/docs",
+                  openapi_url=None if demo else "/api/openapi.json", lifespan=lifespan)
+    if demo:
+        app.add_middleware(DemoBoundary, manager=demo)
+
+    def context(request: Request):
+        return demo.context(request.state.demo_session) if demo else local
+
+    @app.get("/healthz")
+    def healthz():
+        return {"status": "ok"}
 
     @app.exception_handler(WorkmateError)
     async def workmate_error_handler(request, exc: WorkmateError):
-        status = 404 if exc.code == "NOT_FOUND" else 400
+        status = 404 if exc.code == "NOT_FOUND" else 429 if exc.code in {"DEMO_BUSY", "DEMO_LIMIT"} else 403 if exc.code == "DEMO_SAMPLE_ONLY" else 400
         return JSONResponse(status_code=status, content=exc.to_dict())
 
     @app.exception_handler(RequestValidationError)
@@ -73,7 +95,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def internal_error_handler(request, exc):
         return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL_ERROR", "message": "操作失败，请检查本地目录与数据后重试。"}})
 
-    def _run_task(task_id: str, file_path: str, req: TaskRequest, snapshot, confirmation) -> None:
+    def _run_task(task_id: str, file_path: str, req: TaskRequest, snapshot, confirmation, loop, session_id) -> None:
         try:
             loop.run(
                 req.instruction.strip(),
@@ -90,8 +112,13 @@ def create_app(config: Config | None = None) -> FastAPI:
             )
         except WorkmateError:
             pass  # 任务状态已由 loop 持久化为 failed
+        finally:
+            if demo:
+                demo.release_job(session_id)
 
-    def _resolve_input(req_file: str) -> Path:
+    def _resolve_input(req_file: str, config) -> Path:
+        if demo and req_file != SAMPLE_NAME:
+            raise WorkmateError("DEMO_SAMPLE_ONLY", "请使用本站合成销售样表。")
         p = Path(req_file).expanduser()
         if not p.is_absolute():
             p = config.data_dir / p
@@ -102,20 +129,42 @@ def create_app(config: Config | None = None) -> FastAPI:
         return p
 
     @app.get("/api/v1/health")
-    def health():
-        return {"status": "ok", "model_provider": config.model_provider}
+    def health(request: Request):
+        config = context(request).config
+        result = {"status": "ok", "model_provider": config.model_provider}
+        if demo:
+            result.update({"demo": True, "sample_only": True, "max_tasks": demo.max_tasks,
+                           "session_hours": demo.ttl // 3600})
+        return result
+
+    @app.get("/api/v1/demo-sample")
+    def demo_sample():
+        if not demo:
+            raise WorkmateError("NOT_FOUND", "此入口仅用于在线演示")
+        from fastapi.responses import Response
+        from urllib.parse import quote
+        return Response(SAMPLE, media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(SAMPLE_NAME)}"})
 
     @app.get("/api/v1/diagnostics")
-    def diagnostics():
-        return diagnose(config)
+    def diagnostics(request: Request):
+        if demo:
+            return {"status": "ready", "model_mode": "mock", "model_name": None, "demo": True,
+                    "checks": [{"code": "demo", "status": "ready", "message": "在线演示可用，仅处理内置合成销售样表", "steps": []},
+                               {"code": "model", "status": "ready", "message": "摘要使用离线演示模式，未调用真实模型或收费 API", "steps": []},
+                               {"code": "storage", "status": "ready", "message": "记录按浏览器隔离，最长保留两小时；服务休眠或重建也可能清空，请及时下载", "steps": []}]}
+        return diagnose(context(request).config)
 
     @app.get("/api/v1/data-files")
-    def data_files():
+    def data_files(request: Request):
+        config = context(request).config
         entries = file_tools.search_files("", config.data_dir)
         return {"files": [{"name": p.name, "size": p.stat().st_size} for p in entries]}
 
     @app.post("/api/v1/upload")
-    async def upload(file: UploadFile = File(...)):
+    async def upload(request: Request, file: UploadFile = File(...)):
+        ctx = context(request)
+        config = ctx.config
         name = Path(file.filename or "").name  # 安全文件名：只取 basename，防路径穿越
         if not name:
             raise WorkmateError("BAD_FILE", "文件名不能为空")
@@ -124,6 +173,11 @@ def create_app(config: Config | None = None) -> FastAPI:
         data = await file.read(file_tools.MAX_FILE_MB * 1024 * 1024 + 1)
         if len(data) > file_tools.MAX_FILE_MB * 1024 * 1024:
             raise WorkmateError("FILE_TOO_LARGE", f"文件超过 {file_tools.MAX_FILE_MB}MB 上限")
+        if demo:
+            if Path(name).suffix.lower() != ".csv" or hashlib.sha256(data).digest() != SAMPLE_HASH:
+                raise WorkmateError("DEMO_SAMPLE_ONLY", "在线演示只接受本站提供的合成销售样表，请勿上传真实业务或个人数据。")
+            # The canonical sample is immutable; uploads with identical content reuse it.
+            return {"name": SAMPLE_NAME, "size": len(SAMPLE)}
         try:
             if Path(name).suffix.lower() == ".csv":
                 if b"\x00" in data:
@@ -141,19 +195,36 @@ def create_app(config: Config | None = None) -> FastAPI:
         return {"name": name, "size": len(data)}
 
     @app.post("/api/v1/inspect")
-    def inspect_file(req: InspectRequest):
-        p = _resolve_input(req.file)
+    def inspect_file(req: InspectRequest, request: Request):
+        ctx = context(request)
+        config, loop = ctx.config, ctx.loop
+        p = _resolve_input(req.file, config)
         snapshot = file_tools.read_snapshot(p)
         result = inspect.inspect_file(p, field_mapping=req.field_mapping, snapshot=snapshot)
         mapping = inspect.validate_mapping(snapshot.table(), result["mapping"])
-        receipt = loop.storage.save_confirmation(p, snapshot.fingerprint, mapping)
+        with ctx.lock:
+            if demo and len(loop.storage._load_confirmations()["records"]) >= 60:
+                raise WorkmateError("DEMO_LIMIT", "本工作区的检查次数已用完，请稍后再试。")
+            receipt = loop.storage.save_confirmation(p, snapshot.fingerprint, mapping)
         return {**result, "confirmation_id": receipt["id"]}
 
     @app.post("/api/v1/tasks")
-    def create_task(req: TaskRequest):
+    def create_task(req: TaskRequest, request: Request):
+        ctx = context(request)
+        config, loop = ctx.config, ctx.loop
+        if demo:
+            if not req.confirmation_id:
+                raise WorkmateError("CONFIRMATION_INVALID", "请先检查样表并确认口径，再生成周报。")
+            if len(req.instruction) > 1000:
+                raise WorkmateError("BAD_INSTRUCTION", "演示指令过长，请使用页面默认任务。")
+            if (len(req.unit or "") > 20 or len(req.report_week or "") > 10
+                    or len(req.compare_week or "") > 10 or len(req.confirmation_id) > 32
+                    or any(key not in {"report", "compare"} or not isinstance(value, bool)
+                           for key, value in (req.complete or {}).items())):
+                raise WorkmateError("VALIDATION_ERROR", "演示参数不完整或非法，请在页面中重新确认。")
         if not (req.instruction and req.instruction.strip()):
             raise WorkmateError("BAD_INSTRUCTION", "请填写任务指令")
-        p = _resolve_input(req.file)
+        p = _resolve_input(req.file, config)
         snapshot = file_tools.read_snapshot(p)
         df = snapshot.table()
         if req.field_mapping is not None:
@@ -185,52 +256,89 @@ def create_app(config: Config | None = None) -> FastAPI:
         confirmation = {**receipt, "mode": mode, "amount_mode": req.amount_mode, "unit": req.unit,
                         "report_week": req.report_week, "compare_week": req.compare_week,
                         "complete": req.complete or {}, "confirmed_at": now_iso()}
-        task_id = uuid.uuid4().hex[:12]
-        loop.storage.save_task(Task(task_id=task_id, status="running", instruction=req.instruction.strip(), input_file=str(p), confirmation=confirmation))
-        executor.submit(_run_task, task_id, str(p), req, snapshot, confirmation)
+        session_id = request.state.demo_session if demo else None
+        with ctx.lock:
+            if demo:
+                if len(req.instruction) > 1000 or len(json.dumps(req.complete or {})) > 1000:
+                    raise WorkmateError("BAD_INSTRUCTION", "演示指令过长，请使用页面默认任务。")
+                if len(loop.storage.list_tasks()) >= demo.max_tasks:
+                    raise WorkmateError("DEMO_LIMIT", f"本工作区最多生成 {demo.max_tasks} 份周报，已有成果仍可下载。")
+                demo.reserve_job(session_id)
+            task_id = uuid.uuid4().hex[:12]
+            try:
+                loop.storage.save_task(Task(task_id=task_id, status="running", instruction=req.instruction.strip(), input_file=str(p), confirmation=confirmation))
+                executor.submit(_run_task, task_id, str(p), req, snapshot, confirmation, loop, session_id)
+            except Exception:
+                if demo:
+                    demo.release_job(session_id)
+                raise
         return {"task_id": task_id, "status": "running", "confirmation_mode": mode}
 
     @app.get("/api/v1/tasks")
-    def list_tasks():
+    def list_tasks(request: Request):
+        loop = context(request).loop
         return {"tasks": [t.model_dump() for t in loop.storage.list_tasks()]}
 
     @app.get("/api/v1/tasks/{task_id}")
-    def get_task(task_id: str):
+    def get_task(task_id: str, request: Request):
+        loop = context(request).loop
         t = loop.storage.load_task(task_id)
         if t is None:
             raise WorkmateError("NOT_FOUND", "任务不存在")
         return t.model_dump()
 
+    def task_directory(task_id: str, request: Request):
+        ctx = context(request)
+        if ctx.loop.storage.load_task(task_id) is None:
+            raise WorkmateError("NOT_FOUND", "任务不存在或不属于当前工作区")
+        base = (ctx.config.output_dir / task_id).resolve()
+        if not base.is_relative_to(ctx.config.output_dir.resolve()):
+            raise WorkmateError("NOT_FOUND", "任务不存在")
+        return base
+
     @app.get("/api/v1/tasks/{task_id}/report")
-    def get_report(task_id: str):
-        p = config.output_dir / task_id / "report.md"
+    def get_report(task_id: str, request: Request):
+        p = task_directory(task_id, request) / "report.md"
         if not p.exists():
             raise WorkmateError("NOT_FOUND", "报告不存在")
         return {"report": p.read_text(encoding="utf-8")}
 
     @app.get("/api/v1/tasks/{task_id}/basis")
-    def get_basis(task_id: str):
-        p = config.output_dir / task_id / "analysis_basis.json"
+    def get_basis(task_id: str, request: Request):
+        p = task_directory(task_id, request) / "analysis_basis.json"
         if not p.exists():
             raise WorkmateError("NOT_FOUND", "依据文件不存在")
         return json.loads(p.read_text(encoding="utf-8"))
 
     @app.get("/api/v1/tasks/{task_id}/facts")
-    def get_facts(task_id: str):
+    def get_facts(task_id: str, request: Request):
+        loop = context(request).loop
         t = loop.storage.load_task(task_id)
         if t is None or not t.result:
             raise WorkmateError("NOT_FOUND", "任务不存在或未完成")
         return {"facts": t.result.get("facts", []), "change_facts": t.result.get("change_facts", [])}
 
     @app.get("/api/v1/tasks/{task_id}/files/{name:path}")
-    def get_file(task_id: str, name: str):
-        base = (config.output_dir / task_id).resolve()
+    def get_file(task_id: str, name: str, request: Request):
+        if ".." in Path(name).parts or Path(name).is_absolute():
+            raise WorkmateError("FORBIDDEN", "非法路径")
+        base = task_directory(task_id, request)
         target = (base / name).resolve()
         if not target.is_relative_to(base):
             raise WorkmateError("FORBIDDEN", "非法路径")
-        if not target.exists():
+        if not target.is_file():
             raise WorkmateError("NOT_FOUND", "文件不存在")
         return FileResponse(target)
+
+    if demo:
+        @app.get("/", response_class=HTMLResponse)
+        @app.get("/index.html", response_class=HTMLResponse)
+        def demo_home():
+            html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+            html = html.replace('<body>', '<body data-online-demo="true">')
+            html = html.replace('class="demo-banner" hidden', 'class="demo-banner"')
+            html = html.replace('<title>WorkMate · 办公工作台</title>', '<title>WorkMate · 面试演示</title>')
+            return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     # 静态前端（挂载在最后，/api 优先匹配）
     app.mount("/", LocalStaticFiles(directory=str(STATIC_DIR), html=True), name="static")

@@ -16,7 +16,7 @@ from matplotlib.ticker import FuncFormatter
 import pandas as pd
 
 _FONT_NAMES = {font.name for font in font_manager.fontManager.ttflist}
-_FONTS = [name for name in ("Arial Unicode MS", "PingFang SC", "Heiti SC", "SimHei") if name in _FONT_NAMES] + ["sans-serif"]
+_FONTS = [name for name in ("Noto Sans CJK SC", "Noto Sans CJK JP", "Noto Sans SC", "Arial Unicode MS", "PingFang SC", "Heiti SC", "SimHei") if name in _FONT_NAMES] + ["sans-serif"]
 _PURPLE, _INK, _MUTED, _GRID = "#7863ca", "#252733", "#5d6472", "#e3e6ec"
 # Matplotlib/font rendering is serialized; task computation remains concurrent.
 _RENDER_LOCK = RLock()

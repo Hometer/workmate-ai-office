@@ -1,0 +1,42 @@
+{
+  "url": "https://workmate-interview-demo.onrender.com",
+  "health": 200,
+  "https_cookie_flags": "Secure; HttpOnly; SameSite=Lax",
+  "task_id": "13b801a93e5e",
+  "report_status": "done",
+  "verified_numbers": true,
+  "summary_provider": "mock",
+  "pipeline_and_download_seconds": 17.8,
+  "files": {
+    "report.md": {
+      "bytes": 830,
+      "sha256": "ace4dc5ab4b36e1cff04e050f2aafa025e90d98973cc57f372d1d76fcef24cde"
+    },
+    "data_summary.xlsx": {
+      "bytes": 7453,
+      "sha256": "c5301f7d6b0485f4b6c70b33ecdfdbb6cd24ed6fdd18468db5ef3940fdb83211"
+    },
+    "analysis_basis.json": {
+      "bytes": 1127,
+      "sha256": "0e321160342514c2c59a5084f269871f7676d721e728d69790d7c279a8e3b29d"
+    },
+    "charts/trend.png": {
+      "bytes": 68165,
+      "sha256": "237467b5bb073ee6fb65f20c8024a6f34173ba16435415fb8da439fdd03eb5d6"
+    },
+    "charts/top5.png": {
+      "bytes": 51778,
+      "sha256": "581a2b286070552e79c65918a424e15bf2e2a09fb11ae267bd362ce526ab49a7"
+    },
+    "charts/channel.png": {
+      "bytes": 53650,
+      "sha256": "ccffa58ef186990f43582700235f20b2bee3528f8ddcffa39b38f0f491c20555"
+    }
+  },
+  "official_upload": 200,
+  "other_upload": 403,
+  "isolation": "passed",
+  "csrf": 403,
+  "oversize": 413,
+  "refresh": "passed"
+}
