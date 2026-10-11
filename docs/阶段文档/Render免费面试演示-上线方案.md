@@ -20,7 +20,7 @@ Docker 安装公开 Noto CJK 字体，解决 Linux 图表中文字体；只打�
 
 本地先验证完整链路、跨访客隔离、越权路径、请求上限、进程重启恢复、桌面和手机布局，以及原有 Python/前端回归。后续云端必须验证构建成功、HTTPS 实际网址、完整操作、下载、访客隔离和休眠唤醒。未执行的云端检查标待验。
 
-账号步骤需要用户完成 Render 注册/登录，以及必要的 GitHub 仓库授权。GitHub CLI 身份 Hometer 已核实；最初沙箱无法读取系统 keychain，沙箱外检查后认证正常。Render 浏览器当前停在登录页。
+账号步骤已完成：用户通过 Google 登录，账号已有本仓库 Blueprint，沿用原 Free 服务，无重复创建。GitHub CLI 身份 Hometer 已核实。线上地址为 https://workmate-interview-demo.onrender.com/，实际部署及检查记录见 [云端验收](../evidence/Render免费面试演示/云端上线验收.md)。
 
 ## 用户登录后的操作
 

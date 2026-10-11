@@ -6,7 +6,7 @@
 
 **让数据清楚，让工作轻松。**
 
-[快速开始](#快速开始) · [配置说明](docs/配置说明.md) · [文档导航](docs/README.md) · [项目状态](docs/项目状态.md)
+[在线演示](https://workmate-interview-demo.onrender.com/) · [快速开始](#快速开始) · [配置说明](docs/配置说明.md) · [文档导航](docs/README.md) · [项目状态](docs/项目状态.md)
 
 </div>
 
@@ -57,6 +57,8 @@ WORKMATE_MODEL_PROVIDER=mock .venv/bin/python -m workmate serve --port 8000
 详细参数、数据位置和工程检查见 [配置说明](docs/配置说明.md)。仓库不包含本机密钥、业务数据、依赖目录或运行缓存。
 
 ## Render 免费面试演示
+
+已上线：[打开 WorkMate 面试演示](https://workmate-interview-demo.onrender.com/)，无需注册即可操作。[云端验收记录](docs/evidence/Render免费面试演示/云端上线验收.md)。
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Hometer/workmate-ai-office)
 
