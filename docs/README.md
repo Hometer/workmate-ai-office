@@ -1,4 +1,4 @@
-# WorkMate · AI 办公 · 文档导航
+# WorkMate · AI 数据分析与销售周报 Agent · 文档导航
 
 [返回仓库首页](../README.md) · [项目状态](项目状态.md) · [配置与检查](配置说明.md)
 

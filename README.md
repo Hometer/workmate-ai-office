@@ -1,8 +1,8 @@
 <div align="center">
 
-![WorkMate · AI 办公](docs/assets/readme-cover.svg)
+![WorkMate · AI 数据分析与销售周报 Agent](docs/assets/readme-cover.svg)
 
-# WorkMate · AI 办公
+# WorkMate｜AI 数据分析与销售周报 Agent
 
 **让数据清楚，让工作轻松。**
 
@@ -12,11 +12,13 @@
 
 ## 项目介绍
 
-面向运营、销售和小团队的本地销售周报助手。上传 XLSX / CSV，检查字段和金额口径，生成可回查依据的报告、图表与汇总表。原始文件保持只读，默认模型在本机运行。
+面向销售、运营及门店管理者，解决表格字段不统一、统计口径依赖人工判断、报告结论反复核对等问题，将数据检查、指标计算、图表与报告生成整合为连续的周报任务。
 
-## 界面预览
+[完整项目介绍与核心职责](docs/项目介绍.md)
 
-![WorkMate · AI 办公实际界面](docs/assets/readme-preview.png)
+## 历史界面预览
+
+![WorkMate · AI 数据分析与销售周报 Agent实际界面](docs/assets/readme-preview.png)
 
 实际报告页，使用授权合成销售样表与真实本地 Qwen。它展示当前 A 分期成果，不能视为企业真实业务试用。
 
